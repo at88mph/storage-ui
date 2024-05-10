@@ -157,12 +157,12 @@ public class MainPageServerResource extends StorageItemServerResource {
                 final Writer writer = new StringWriter();
                 final StorageItemWriter storageItemWriter = new StorageItemCSVWriter(writer);
                 final Node nextChild = childNodeIterator.next();
+                PathUtils.augmentParents(Paths.get(parentPath.toString(), nextChild.getName()), nextChild);
 
                 try {
                     // Check the translated storage item's URI first to handle an exception.
                     final StorageItem storageItem = storageItemFactory.translate(nextChild);
 
-                    PathUtils.augmentParents(Paths.get(parentPath.toString(), nextChild.getName()), nextChild);
                     storageItemWriter.write(storageItem);
                 } catch (URISyntaxException uriSyntaxException) {
                     LOGGER.error("Cannot create a URI from node {}.  Skipping...",

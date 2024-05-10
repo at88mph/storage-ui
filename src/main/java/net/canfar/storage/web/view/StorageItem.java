@@ -147,7 +147,7 @@ public abstract class StorageItem {
     }
 
     public boolean isReadable() {
-        return (uri.isRoot() || uri.getParentURI().isRoot() || readableFlag);
+        return readableFlag;
     }
 
     public boolean isWritable() {
