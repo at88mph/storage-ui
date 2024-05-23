@@ -111,12 +111,12 @@ public class VOSpaceStatusService extends StatusService {
 
     @Override
     public Representation toRepresentation(final Status status, final Request request, final Response response) {
-        final VOSpaceServiceConfig currentService =
-                this.voSpaceServiceConfigManager.getServiceConfig(getCurrentVOSpaceService(request));
         if (isPlainTextMessageStatus(status)) {
             response.setStatus(status);
             return new StringRepresentation(status.getReasonPhrase(), MediaType.TEXT_PLAIN);
         } else {
+            final VOSpaceServiceConfig currentService =
+                    this.voSpaceServiceConfigManager.getServiceConfig(getCurrentVOSpaceService(request));
             final Map<String, Object> dataModel = new HashMap<>();
             final Context curContext = getContext();
 

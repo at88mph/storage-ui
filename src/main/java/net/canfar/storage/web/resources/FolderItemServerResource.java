@@ -141,8 +141,7 @@ public class FolderItemServerResource extends StorageItemServerResource {
 
             return new JSONRepresentation() {
                 @Override
-                public void write(final JSONWriter jsonWriter)
-                        throws JSONException {
+                public void write(final JSONWriter jsonWriter) throws JSONException {
                     jsonWriter.object()
                               .key("size").value(remainingSizeString)
                               .key("quota").value(quotaString)

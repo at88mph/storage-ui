@@ -80,6 +80,7 @@ import net.canfar.storage.web.config.StorageConfiguration;
 import net.canfar.storage.web.config.VOSpaceServiceConfigManager;
 import net.canfar.storage.web.restlet.StorageApplication;
 
+import org.apache.log4j.Logger;
 import org.opencadc.token.Client;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
@@ -98,6 +99,7 @@ import java.util.Set;
 
 
 class SecureServerResource extends ServerResource {
+    private static final Logger LOGGER = Logger.getLogger(SecureServerResource.class);
     final StorageConfiguration storageConfiguration;
 
     public SecureServerResource() {
@@ -135,8 +137,12 @@ class SecureServerResource extends ServerResource {
         final Subject subject = AuthenticationUtil.getCurrentSubject();
 
         if (firstPartyCookie != null && storageConfiguration.isOIDCConfigured()) {
+            long startTime = System.currentTimeMillis();
             try {
+                LOGGER.debug("Obtaining access token");
                 final String accessToken = getOIDCClient().getAccessToken(firstPartyCookie.getValue());
+                LOGGER.debug(String.format("Obtaining access token: OK - (%d seconds)",
+                                           (System.currentTimeMillis() - startTime) / 1000));
 
                 subject.getPrincipals().add(new AuthorizationTokenPrincipal(AuthenticationUtil.AUTHORIZATION_HEADER,
                                                                             AuthenticationUtil.CHALLENGE_TYPE_BEARER
@@ -146,13 +152,21 @@ class SecureServerResource extends ServerResource {
                                                Collections.singletonList(
                                                        URI.create(getRequest().getResourceRef().toString()).getHost())));
 
+
                 if (!subject.getPrincipals(AuthorizationTokenPrincipal.class).isEmpty()) {
+                    startTime = System.currentTimeMillis();
+                    LOGGER.debug("Validating subject.");
                     // Ensure it's clean first.
                     subject.getPublicCredentials(AuthMethod.class)
                            .forEach(authMethod -> subject.getPublicCredentials().remove(authMethod));
                     subject.getPublicCredentials().add(AuthMethod.TOKEN);
 
-                    return AuthenticationUtil.getIdentityManager().validate(subject);
+                    final Subject validatedSubject = AuthenticationUtil.getIdentityManager().validate(subject);
+
+                    LOGGER.debug(String.format("Validating subject: OK - (%d seconds)",
+                                               (System.currentTimeMillis() - startTime) / 1000));
+
+                    return validatedSubject;
                 }
             } catch (NoSuchElementException noSuchElementException) {
                 // No Asset found
