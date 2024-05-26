@@ -71,62 +71,39 @@ package org.opencadc.storage.node;
 import ca.nrc.cadc.auth.AuthMethod;
 import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.AuthorizationToken;
-import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.reg.Standards;
 import ca.nrc.cadc.util.StringUtil;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 import javax.security.auth.Subject;
 import net.canfar.storage.PathUtils;
-import net.canfar.storage.web.UploadOutputStreamWrapper;
-import net.canfar.storage.web.UploadOutputStreamWrapperImpl;
-import net.canfar.storage.web.resources.FileItemServerResource;
-import net.canfar.storage.web.restlet.JSONRepresentation;
-import org.apache.commons.fileupload.FileItemIterator;
-import org.apache.commons.fileupload.FileItemStream;
-import org.apache.commons.fileupload.FileUploadException;
-import org.apache.commons.fileupload.disk.DiskFileItemFactory;
-import org.apache.commons.fileupload.servlet.ServletFileUpload;
 import org.apache.log4j.Logger;
-import org.json.JSONException;
-import org.json.JSONWriter;
 import org.opencadc.storage.config.VOSpaceServiceConfig;
+import org.opencadc.vospace.ContainerNode;
 import org.opencadc.vospace.DataNode;
-import org.opencadc.vospace.NodeNotFoundException;
+import org.opencadc.vospace.Node;
+import org.opencadc.vospace.NodeProperty;
 import org.opencadc.vospace.VOS;
 import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.View;
 import org.opencadc.vospace.client.ClientTransfer;
-import org.opencadc.vospace.client.VOSClientUtil;
-import org.opencadc.vospace.server.Utils;
+
+import org.opencadc.vospace.client.async.RecursiveSetNode;
 import org.opencadc.vospace.transfer.Direction;
 import org.opencadc.vospace.transfer.Protocol;
 import org.opencadc.vospace.transfer.Transfer;
-import org.restlet.data.MediaType;
-import org.restlet.data.Status;
-import org.restlet.ext.servlet.ServletUtils;
-import org.restlet.representation.Representation;
-import org.restlet.resource.ResourceException;
 
 
 public class FileHandler extends StorageHandler {
-    private final static AuthMethod[] PROTOCOL_AUTH_METHODS = new AuthMethod[] {
-        AuthMethod.ANON,
-        AuthMethod.CERT,
-        AuthMethod.COOKIE
-    };
     private static final Logger LOGGER = Logger.getLogger(FileHandler.class);
-    private static final int BUFFER_SIZE = 8192;
-    private static final String UPLOAD_FILE_KEY = "upload";
+
 
     public FileHandler(VOSpaceServiceConfig currentService, Subject subject) {
         super(currentService, subject);
@@ -134,38 +111,80 @@ public class FileHandler extends StorageHandler {
 
     /**
      * Obtain a redirect to an absolute URL to download from.  Used from a GET request.
-     * @param nodePath  The Path to download.
-     * @return  String URL.
-     * @throws Exception    If no URL can be obtained, or the Node cannot be read.
+     *
+     * @param nodePath The Path to download.
+     * @return String URL.
+     * @throws Exception If no URL can be obtained, or the Node cannot be read.
      */
     public String getDownloadEndpoint(final Path nodePath) throws Exception {
         final DataNode dataNode = getNode(nodePath, null, null);
         return getDownloadEndpoint(dataNode);
     }
 
-    public void upload(final FileItemIterator fileItemIterator, final String contentType) throws Exception {
-        if ("multipart/form-data".equals(contentType)) {
-            // The Apache FileUpload project parses HTTP requests which
-            // conform to RFC 1867, "Form-based File Upload in HTML". That
-            // is, if an HTTP request is submitted using the POST method,
-            // and with a content type of "multipart/form-data", then
-            // FileUpload can parse that request, and get all uploaded files
-            // as FileItem.
+    /**
+     * Set permissions that should be inherited.
+     * @param nodePath  The path to set the permissions on.
+     * @throws Exception    If the node cannot be read or written to.
+     */
+    public void setInheritedPermissions(final Path nodePath) throws Exception {
+        final Node newNode = getNode(nodePath, null);
+        PathUtils.augmentParents(nodePath, newNode);
 
-            // Obtain the file upload as an iterator.
-            if (!fileItemIterator.hasNext()) {
-                // Some problem occurs, sent back a simple line of text.
-//                uploadError(Status.CLIENT_ERROR_BAD_REQUEST, "Unable to upload corrupted or incompatible data.");
-            } else {
-                acceptUpload(fileItemIterator);
-            }
-        } else {
-            throw new IllegalArgumentException("Nothing to upload or invalid data for " + contentType);
+        final ContainerNode parentNode = newNode.parent;
+        final Set<NodeProperty> newNodeProperties = newNode.getProperties();
+
+        // Clean slate.
+        newNodeProperties.remove(new NodeProperty(VOS.PROPERTY_URI_GROUPREAD));
+        newNodeProperties.remove(new NodeProperty(VOS.PROPERTY_URI_GROUPWRITE));
+        newNodeProperties.remove(new NodeProperty(VOS.PROPERTY_URI_ISPUBLIC));
+
+        final String parentReadGroupURIValue = parentNode.getPropertyValue(VOS.PROPERTY_URI_GROUPREAD);
+        if (StringUtil.hasText(parentReadGroupURIValue)) {
+            newNodeProperties.add(new NodeProperty(VOS.PROPERTY_URI_GROUPREAD, parentReadGroupURIValue));
+        }
+
+        final String parentWriteGroupURIValue = parentNode.getPropertyValue(VOS.PROPERTY_URI_GROUPWRITE);
+
+        if (StringUtil.hasText(parentWriteGroupURIValue)) {
+            newNodeProperties.add(new NodeProperty(VOS.PROPERTY_URI_GROUPWRITE, parentWriteGroupURIValue));
+        }
+
+        final String isPublicValue = parentNode.getPropertyValue(VOS.PROPERTY_URI_ISPUBLIC);
+        if (StringUtil.hasText(isPublicValue)) {
+            newNodeProperties.add(new NodeProperty(VOS.PROPERTY_URI_ISPUBLIC, isPublicValue));
+        }
+
+        executeSecurely((PrivilegedExceptionAction<Void>) () -> {
+            getVOSpaceClient().setNode(this.currentService.toURI(newNode), newNode);
+            return null;
+        });
+    }
+
+    /**
+     * Perform the HTTPS command to recursively set permissions for a node.
+     * Returns when job is complete, OR a maximum of (15) seconds has elapsed.
+     * If timeout has been reached, job will continue to run until is cancelled.
+     *
+     * @param newNode The Node whose permissions are to be recursively set
+     */
+    void setNodeRecursiveSecure(final Node newNode) throws Exception {
+        try {
+            Subject.doAs(this.subject, (PrivilegedExceptionAction<Void>) () -> {
+                final RecursiveSetNode rj = getVOSpaceClient().createRecursiveSetNode(this.currentService.toURI(newNode), newNode);
+
+                // Fire & forget is 'false'. 'true' will mean the run job does not return until it's finished.
+                rj.setMonitor(false);
+                rj.run();
+
+                return null;
+            });
+        } catch (PrivilegedActionException pae) {
+            throw new IOException(pae.getException());
         }
     }
 
     String getDownloadEndpoint(final DataNode dataNode) throws Exception {
-        final VOSURI dataNodeVOSURI = toURI(dataNode);
+        final VOSURI dataNodeVOSURI = this.currentService.toURI(dataNode);
         final AuthMethod authMethod = AuthenticationUtil.getAuthMethodFromCredentials(this.subject);
         final URL baseURL = lookupDownloadEndpoint(dataNodeVOSURI.getServiceURI(), authMethod);
         final String downloadURL;
@@ -196,10 +215,7 @@ public class FileHandler extends StorageHandler {
      * @throws IllegalStateException if no URL can be found.
      */
     private URL lookupDownloadEndpoint(final URI serviceURI, final AuthMethod authMethod) {
-        final URI[] downloadEndpointStandards = new URI[] {
-            Standards.VOSPACE_FILES,
-            Standards.VOSPACE_FILES_20
-        };
+        final URI[] downloadEndpointStandards = new URI[] {Standards.VOSPACE_FILES, Standards.VOSPACE_FILES_20};
 
         for (final URI uri : downloadEndpointStandards) {
             final URL serviceURL = lookupDownloadEndpoint(serviceURI, uri, authMethod);
@@ -208,13 +224,12 @@ public class FileHandler extends StorageHandler {
             }
         }
 
-        throw new IllegalStateException("Incomplete configuration in the registry.  No endpoint for "
-                                        + serviceURI + " could be found from ("
-                                        + Arrays.toString(downloadEndpointStandards) + ")");
+        throw new IllegalStateException(
+            "Incomplete configuration in the registry.  No endpoint for " + serviceURI + " could be found from (" + Arrays.toString(downloadEndpointStandards)
+            + ")");
     }
 
-    private URL lookupDownloadEndpoint(final URI serviceURI, final URI capabilityStandardURI,
-                                       final AuthMethod authMethod) {
+    private URL lookupDownloadEndpoint(final URI serviceURI, final URI capabilityStandardURI, final AuthMethod authMethod) {
         return getRegistryClient().getServiceURL(serviceURI, capabilityStandardURI, authMethod);
     }
 
@@ -227,183 +242,6 @@ public class FileHandler extends StorageHandler {
         final ClientTransfer ct = getVOSpaceClient().createTransfer(transfer);
         return ct.getTransfer().getEndpoint();
     }
-
-    /**
-     * Upload the given items from the iterator.
-     *
-     * @param fileItemIterator Iterator of file items to upload.
-     * @throws Exception Any errors during permission setting or uploading over the network.
-     */
-    protected void acceptUpload(final FileItemIterator fileItemIterator) throws Exception {
-        boolean inheritParentPermissions = false;
-        Path newNodePath = null;
-
-        try {
-            while (fileItemIterator.hasNext()) {
-                final FileItemStream nextFileItemStream = fileItemIterator.next();
-
-                if (nextFileItemStream.getFieldName().startsWith(UPLOAD_FILE_KEY)) {
-                    newNodePath = upload(nextFileItemStream);
-                } else if (nextFileItemStream.getFieldName().equals("inheritPermissionsCheckBox")) {
-                    inheritParentPermissions = true;
-                }
-            }
-        } catch (FileUploadException e) {
-            throw new IOException(e);
-        }
-
-        if (inheritParentPermissions) {
-            setInheritedPermissions(newNodePath);
-        }
-    }
-
-    /**
-     * Perform the actual upload.
-     *
-     * @param fileItemStream The upload file item stream.
-     * @return The Path to the new Node.
-     * @throws IOException If anything goes wrong.
-     */
-    Path upload(final FileItemStream fileItemStream) throws Exception {
-        final String filename = fileItemStream.getName();
-
-        if (fileValidator.validateFileName(filename)) {
-            final DataNode dataNode = new DataNode(filename);
-            PathUtils.augmentParents(Paths.get(getCurrentPath().toString(), filename), dataNode);
-
-            final String contentType = fileItemStream.getContentType();
-
-            try (final InputStream inputStream = fileItemStream.openStream()) {
-                upload(inputStream, dataNode, contentType);
-            }
-
-            return PathUtils.toPath(dataNode);
-        } else {
-            throw new ResourceException(new IllegalArgumentException(
-                String.format("Invalid file name: %s -- File name must match %s.", filename,
-                              fileValidator.getRule())));
-        }
-    }
-
-    /**
-     * Do the secure upload.
-     *
-     * @param inputStream The InputStream to pull from.
-     * @param dataNode    The DataNode to upload to.
-     * @param contentType           The file content type.
-     */
-    protected void upload(final InputStream inputStream, final DataNode dataNode, final String contentType)
-        throws Exception {
-        final UploadOutputStreamWrapper outputStreamWrapper = new UploadOutputStreamWrapperImpl(inputStream,
-                                                                                                BUFFER_SIZE);
-
-        try {
-            // Due to a bug in VOSpace that returns a 400 while checking
-            // for an existing Node, we will work around it by checking manually
-            // rather than looking for a NodeNotFoundException as expected, and
-            // return the 409 code, while maintaining backward compatibility with the catch below.
-            // jenkinsd 2016.07.25
-            getNode(Paths.get(Utils.getPath(dataNode)), null);
-        } catch (ResourceException e) {
-            final Throwable cause = e.getCause();
-            if (cause instanceof IllegalStateException) {
-                final Throwable illegalStateCause = cause.getCause();
-                if ((illegalStateCause instanceof NodeNotFoundException)
-                    || (illegalStateCause instanceof ResourceNotFoundException)) {
-                    createNode(dataNode);
-                } else {
-                    throw new ResourceException(Status.CLIENT_ERROR_BAD_REQUEST, e.getCause());
-                }
-            } else if ((cause instanceof NodeNotFoundException) || (cause instanceof ResourceNotFoundException)) {
-                createNode(dataNode);
-            } else {
-                throw new ResourceException(Status.CLIENT_ERROR_BAD_REQUEST, e.getCause());
-            }
-        }
-
-        try {
-            executeSecurely(() -> {
-                upload(outputStreamWrapper, dataNode, contentType);
-                return null;
-            });
-        } catch (Exception e) {
-            final String message;
-
-            if ((e.getCause() != null) && StringUtil.hasText(e.getCause().getMessage())) {
-                message = e.getCause().getMessage();
-            } else if (StringUtil.hasText(e.getMessage())) {
-                message = e.getMessage();
-            } else {
-                message = "Error during upload.";
-            }
-
-//            uploadError(Status.SERVER_ERROR_INTERNAL, message);
-        }
-    }
-
-    /**
-     * Abstract away the Transfer stuff.  It's cumbersome.
-     *
-     * @param outputStreamWrapper The OutputStream wrapper.
-     * @param dataNode            The node to upload.
-     * @param contentType           The file content type.
-     * @throws Exception To capture transfer and upload failures.
-     */
-    void upload(final UploadOutputStreamWrapper outputStreamWrapper, final DataNode dataNode, final String contentType)
-        throws Exception {
-        final VOSURI dataNodeVOSURI = toURI(dataNode);
-
-        final List<Protocol> protocols = Arrays.stream(FileHandler.PROTOCOL_AUTH_METHODS).map(authMethod -> {
-            final Protocol httpsAuth = new Protocol(VOS.PROTOCOL_HTTPS_PUT);
-            httpsAuth.setSecurityMethod(Standards.getSecurityMethod(authMethod));
-            return httpsAuth;
-        }).collect(Collectors.toList());
-
-        final Transfer transfer = new Transfer(dataNodeVOSURI.getURI(), Direction.pushToVoSpace);
-        transfer.setView(new View(VOS.VIEW_DEFAULT));
-        transfer.getProtocols().addAll(protocols);
-        transfer.version = VOS.VOSPACE_21;
-
-        final ClientTransfer ct = getVOSpaceClient().createTransfer(transfer);
-        ct.setRequestProperty("content-type", contentType);
-        ct.setOutputStreamWrapper(outputStreamWrapper);
-        ct.runTransfer();
-
-        // Check uws job status
-        VOSClientUtil.checkTransferFailure(ct);
-
-//        if (ct.getHttpTransferDetails().getDigest() != null) {
-//            uploadVerifier.verifyMD5(outputStreamWrapper.getCalculatedMD5(),
-//                                     ct.getHttpTransferDetails().getDigest().getSchemeSpecificPart());
-//        }
-//
-//        uploadSuccess();
-    }
-
-    /**
-     * Parse the representation into a Map for easier access to Form elements.
-     *
-     * @return Map of field names to File Items, or empty Map.  Never null.
-     */
-    private ServletFileUpload parseRepresentation() {
-        // 1/ Create a factory for disk-based file items
-        final DiskFileItemFactory factory = new DiskFileItemFactory();
-        factory.setSizeThreshold(1000240);
-
-        // Create a new file upload handler.
-        return createFileUpload(factory);
-    }
-
-    /**
-     * External method of obtaining a Restlet File Upload.
-     *
-     * @param factory Factory used to create the upload.
-     * @return RestletFileUpload instance.
-     */
-    private ServletFileUpload createFileUpload(final DiskFileItemFactory factory) {
-        return new ServletFileUpload(factory);
-    }
-
 
 //    private void uploadError(final Status status, final String message) {
 //        writeResponse(status,

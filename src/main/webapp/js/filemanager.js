@@ -2289,7 +2289,7 @@ function fileManager(
           selected: true
         })
         .data(),
-      function(key, itemData) {
+      function(_key, itemData) {
         paths.push(itemData[9])
       }
     )

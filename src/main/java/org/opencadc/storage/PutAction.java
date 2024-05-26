@@ -69,9 +69,52 @@
 package org.opencadc.storage;
 
 
+import ca.nrc.cadc.rest.InlineContentHandler;
+import javax.servlet.http.HttpServletResponse;
+import org.json.JSONObject;
+import org.opencadc.storage.node.FolderHandler;
+import org.opencadc.storage.node.LinkHandler;
+
+
 public class PutAction extends StorageAction {
     @Override
     public void doAction() throws Exception {
+        final StorageItemContext storageItemType = getStorageItemType();
 
+        switch (storageItemType) {
+            case FOLDER:
+                handleFolder();
+                break;
+            case FILE:
+                handleFile();
+                break;
+            case LINK:
+                handleLink();
+                break;
+            default: {
+                throw new UnsupportedOperationException("No PUT supported for " + storageItemType);
+            }
+        }
+    }
+
+    private void handleFile() {
+
+    }
+
+    private void handleFolder() throws Exception {
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject());
+        folderHandler.create(getCurrentPath());
+        this.syncOutput.setCode(HttpServletResponse.SC_CREATED);
+    }
+
+    private void handleLink() throws Exception {
+        final LinkHandler linkHandler = new LinkHandler(this.currentService, getCurrentSubject());
+        linkHandler.create(getCurrentPath(), (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY));
+        this.syncOutput.setCode(HttpServletResponse.SC_CREATED);
+    }
+
+    @Override
+    protected InlineContentHandler getInlineContentHandler() {
+        return new JSONInlineContentHandler();
     }
 }

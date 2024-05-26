@@ -3,7 +3,7 @@
  *******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
  **************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
  *
- *  (c) 2024.                            (c) 2024.
+ *  (c) 2023.                            (c) 2023.
  *  Government of Canada                 Gouvernement du Canada
  *  National Research Council            Conseil national de recherches
  *  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -66,104 +66,39 @@
  ************************************************************************
  */
 
-package org.opencadc.storage.node;
+package org.opencadc.storage;
 
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import javax.security.auth.Subject;
-import net.canfar.storage.PathUtils;
-import net.canfar.storage.web.view.StorageItem;
-import org.json.JSONObject;
-import org.opencadc.storage.StorageItemFactory;
-import org.opencadc.storage.config.VOSpaceServiceConfig;
-import org.opencadc.vospace.LinkNode;
+import java.util.Arrays;
+import org.opencadc.vospace.ContainerNode;
 import org.opencadc.vospace.Node;
-import org.opencadc.vospace.NodeNotFoundException;
-import org.opencadc.vospace.VOSURI;
+import org.opencadc.vospace.server.Utils;
 
-
-public class LinkHandler extends StorageHandler {
-    private final static String JSON_TARGET_KEY = "link_url";
-
-    public LinkHandler(VOSpaceServiceConfig currentService, Subject subject) {
-        super(currentService, subject);
-    }
+public class PathUtils {
 
     /**
-     * Resolve this link Node's target to its final destination.  This method
-     * will follow the target of the provided LinkNode, and continue to do so
-     * until an external URL is found, or Node that is not a Link Node.
-     * <p>
-     * Finally, this method will redirect to the appropriate endpoint.
-     *
-     * @param nodePath           The Path of the LinkNode to resolve.
-     * @param storageItemFactory The StorageItemFactory to resolve the link.
-     * @throws NodeNotFoundException If the target is not found
+     * Augment the parents of the given node, using elements from the node's path.
+     * @param nodePath  The Path of the node, NOT its parent.
+     * @param node      The Node to update.
      */
-    public URI resolve(final Path nodePath, final StorageItemFactory storageItemFactory) throws NodeNotFoundException {
-        final LinkNode linkNode = getNode(nodePath);
-        return resolve(linkNode, storageItemFactory);
+    public static void augmentParents(final Path nodePath, final Node node) {
+        Node currNode = node;
+        Path currPath = nodePath.getParent();
+        for (; (currPath != null) && (currPath.getRoot() != currPath); currPath = currPath.getParent()) {
+            final ContainerNode containerNode = new ContainerNode(currPath.getFileName().toString());
+            currNode.parent = containerNode;
+            currNode = containerNode;
+        }
     }
 
-    /**
-     * Create a new LinkNode.
-     *
-     * @param path       The path of the Link.
-     * @param jsonObject The JSON containing the target URI of the link.
-     * @throws Exception If the node cannot be created.
-     */
-    public void create(final Path path, final JSONObject jsonObject) throws Exception {
-        createNode(toLinkNode(path, URI.create(jsonObject.getString(LinkHandler.JSON_TARGET_KEY))));
-    }
-
-    /**
-     * Resolve the given LinkNode's target URI and return it.
-     *
-     * @param linkNode The LinkNode to resolve.
-     * @return URI of the target.
-     * @throws NodeNotFoundException If the target is not found.
-     */
-    private URI resolve(final LinkNode linkNode, final StorageItemFactory storageItemFactory) throws NodeNotFoundException {
-        final URI endPoint;
-        final URI targetURI = linkNode.getTarget();
-
-        // Should ALWAYS be true for a LinkNode!
-        if (targetURI == null) {
-            throw new IllegalArgumentException("**BUG**: LinkNode has a null target!");
+    public static Path toPath(final Node node) {
+        final String[] pathElements = Utils.getPath(node).split("/");
+        if (pathElements.length > 1) {
+            return Paths.get(File.separator + pathElements[0], Arrays.copyOfRange(pathElements, 1, pathElements.length));
         } else {
-            try {
-                final VOSURI vosURI = new VOSURI(targetURI);
-                final Node targetNode = getNode(Paths.get(vosURI.getPath()), null);
-
-                if (targetNode == null) {
-                    throw new NodeNotFoundException("No target found or broken link for node: " + linkNode.getName());
-                } else {
-                    if (targetNode instanceof LinkNode) {
-                        endPoint = resolve((LinkNode) targetNode, storageItemFactory);
-                    } else {
-                        final StorageItem storageItem = storageItemFactory.translate(targetNode);
-                        endPoint = URI.create(storageItem.getTargetPath());
-                    }
-                }
-            } catch (IllegalArgumentException | URISyntaxException e) {
-                // Not a VOSpace URI, so return this URI.
-                return targetURI;
-            }
+            return Paths.get(File.separator + pathElements[0]);
         }
-
-        if (endPoint == null) {
-            throw new IllegalArgumentException("Link " + linkNode.getTarget() + " cannot be resolved.");
-        }
-
-        return endPoint;
-    }
-
-    private LinkNode toLinkNode(final Path path, final URI target) {
-        final LinkNode linkNode = new LinkNode(path.getFileName().toString(), target);
-        PathUtils.augmentParents(path, linkNode);
-
-        return linkNode;
     }
 }

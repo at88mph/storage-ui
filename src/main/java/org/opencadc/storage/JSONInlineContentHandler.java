@@ -66,104 +66,33 @@
  ************************************************************************
  */
 
-package org.opencadc.storage.node;
+package org.opencadc.storage;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import javax.security.auth.Subject;
-import net.canfar.storage.PathUtils;
-import net.canfar.storage.web.view.StorageItem;
+import ca.nrc.cadc.net.TransientException;
+import ca.nrc.cadc.rest.InlineContentException;
+import ca.nrc.cadc.rest.InlineContentHandler;
+import java.io.IOException;
+import java.io.InputStream;
 import org.json.JSONObject;
-import org.opencadc.storage.StorageItemFactory;
-import org.opencadc.storage.config.VOSpaceServiceConfig;
-import org.opencadc.vospace.LinkNode;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.NodeNotFoundException;
-import org.opencadc.vospace.VOSURI;
 
+/**
+ * InlineContentHandler to transform the payload into a JSON Object Content object.
+ */
+public class JSONInlineContentHandler implements InlineContentHandler {
+    public final static String PAYLOAD_KEY = "payload";
 
-public class LinkHandler extends StorageHandler {
-    private final static String JSON_TARGET_KEY = "link_url";
+    @Override
+    public Content accept(String name, String contentType, InputStream inputStream) throws InlineContentException, IOException, TransientException {
+        if (contentType != null && contentType.equals("application/json")) {
+            final String jsonString = new String(inputStream.readAllBytes());
+            final JSONObject jsonObject = new JSONObject(jsonString);
+            final InlineContentHandler.Content payloadContent = new InlineContentHandler.Content();
+            payloadContent.name = JSONInlineContentHandler.PAYLOAD_KEY;
+            payloadContent.value = jsonObject;
 
-    public LinkHandler(VOSpaceServiceConfig currentService, Subject subject) {
-        super(currentService, subject);
-    }
-
-    /**
-     * Resolve this link Node's target to its final destination.  This method
-     * will follow the target of the provided LinkNode, and continue to do so
-     * until an external URL is found, or Node that is not a Link Node.
-     * <p>
-     * Finally, this method will redirect to the appropriate endpoint.
-     *
-     * @param nodePath           The Path of the LinkNode to resolve.
-     * @param storageItemFactory The StorageItemFactory to resolve the link.
-     * @throws NodeNotFoundException If the target is not found
-     */
-    public URI resolve(final Path nodePath, final StorageItemFactory storageItemFactory) throws NodeNotFoundException {
-        final LinkNode linkNode = getNode(nodePath);
-        return resolve(linkNode, storageItemFactory);
-    }
-
-    /**
-     * Create a new LinkNode.
-     *
-     * @param path       The path of the Link.
-     * @param jsonObject The JSON containing the target URI of the link.
-     * @throws Exception If the node cannot be created.
-     */
-    public void create(final Path path, final JSONObject jsonObject) throws Exception {
-        createNode(toLinkNode(path, URI.create(jsonObject.getString(LinkHandler.JSON_TARGET_KEY))));
-    }
-
-    /**
-     * Resolve the given LinkNode's target URI and return it.
-     *
-     * @param linkNode The LinkNode to resolve.
-     * @return URI of the target.
-     * @throws NodeNotFoundException If the target is not found.
-     */
-    private URI resolve(final LinkNode linkNode, final StorageItemFactory storageItemFactory) throws NodeNotFoundException {
-        final URI endPoint;
-        final URI targetURI = linkNode.getTarget();
-
-        // Should ALWAYS be true for a LinkNode!
-        if (targetURI == null) {
-            throw new IllegalArgumentException("**BUG**: LinkNode has a null target!");
+            return payloadContent;
         } else {
-            try {
-                final VOSURI vosURI = new VOSURI(targetURI);
-                final Node targetNode = getNode(Paths.get(vosURI.getPath()), null);
-
-                if (targetNode == null) {
-                    throw new NodeNotFoundException("No target found or broken link for node: " + linkNode.getName());
-                } else {
-                    if (targetNode instanceof LinkNode) {
-                        endPoint = resolve((LinkNode) targetNode, storageItemFactory);
-                    } else {
-                        final StorageItem storageItem = storageItemFactory.translate(targetNode);
-                        endPoint = URI.create(storageItem.getTargetPath());
-                    }
-                }
-            } catch (IllegalArgumentException | URISyntaxException e) {
-                // Not a VOSpace URI, so return this URI.
-                return targetURI;
-            }
+            throw new InlineContentException("Unsupported content type: " + contentType);
         }
-
-        if (endPoint == null) {
-            throw new IllegalArgumentException("Link " + linkNode.getTarget() + " cannot be resolved.");
-        }
-
-        return endPoint;
-    }
-
-    private LinkNode toLinkNode(final Path path, final URI target) {
-        final LinkNode linkNode = new LinkNode(path.getFileName().toString(), target);
-        PathUtils.augmentParents(path, linkNode);
-
-        return linkNode;
     }
 }

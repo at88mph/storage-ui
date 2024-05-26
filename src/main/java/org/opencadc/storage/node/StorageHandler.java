@@ -100,7 +100,7 @@ public abstract class StorageHandler {
         this.currentService = currentService;
     }
 
-    <T extends Node> T getNode(final Path nodePath) {
+    <T extends Node> T getNode(final Path nodePath) throws Exception {
         return getNode(nodePath, VOS.Detail.max, StorageHandler.DEFAULT_DISPLAY_PAGE_SIZE);
     }
 
@@ -109,7 +109,7 @@ public abstract class StorageHandler {
     }
 
     @SuppressWarnings("unchecked")
-    final <T extends Node> T getNode(final Path nodePath, final VOS.Detail detail, final Integer limit) {
+    final <T extends Node> T getNode(final Path nodePath, final VOS.Detail detail, final Integer limit) throws Exception {
         final Map<String, Object> queryPayload = new HashMap<>();
         if (limit != null) {
             queryPayload.put("limit", limit);
@@ -124,8 +124,7 @@ public abstract class StorageHandler {
                                          .collect(Collectors.joining("&"));
 
         try {
-            final T currentNode = Subject.doAs(subject, (PrivilegedExceptionAction<T>) () ->
-                (T) getVOSpaceClient().getNode(nodePath.toString(), query));
+            final T currentNode = executeSecurely(() -> (T) getVOSpaceClient().getNode(nodePath.toString(), query));
             if (currentNode != null) {
                 PathUtils.augmentParents(nodePath, currentNode);
             }
@@ -165,12 +164,10 @@ public abstract class StorageHandler {
             } else {
                 throw runtimeException;
             }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
     }
 
-    <T extends Node> T getNode(final Path nodePath, final VOS.Detail detail) {
+    <T extends Node> T getNode(final Path nodePath, final VOS.Detail detail) throws Exception {
         final int pageSize;
 
         if ((detail == VOS.Detail.max) || (detail == VOS.Detail.raw)) {
@@ -184,26 +181,17 @@ public abstract class StorageHandler {
 
     void createNode(final Node newNode) throws Exception {
         executeSecurely((PrivilegedExceptionAction<Void>) () -> {
-            getVOSpaceClient().createNode(toURI(newNode), newNode, false);
+            getVOSpaceClient().createNode(this.currentService.toURI(newNode), newNode, false);
             return null;
         });
     }
 
-    <T> void executeSecurely(final PrivilegedExceptionAction<T> runnable) throws Exception {
+    <T> T executeSecurely(final PrivilegedExceptionAction<T> runnable) throws Exception {
         try {
-            Subject.doAs(this.subject, runnable);
+            return Subject.doAs(this.subject, runnable);
         } catch (PrivilegedActionException e) {
             throw e.getException();
         }
-    }
-
-    VOSURI toURI(final Path path) {
-        return new VOSURI(URI.create(this.currentService.getNodeResourceID() + path.toString()));
-    }
-
-    VOSURI toURI(final Node node) {
-        final Path path = PathUtils.toPath(node);
-        return toURI(path);
     }
 
     RegistryClient getRegistryClient() {

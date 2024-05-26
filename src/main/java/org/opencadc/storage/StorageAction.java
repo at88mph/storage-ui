@@ -92,8 +92,6 @@ import org.opencadc.storage.config.StorageConfiguration;
 import org.opencadc.storage.config.VOSpaceServiceConfig;
 import org.opencadc.storage.config.VOSpaceServiceConfigManager;
 import org.opencadc.token.Client;
-import org.opencadc.vospace.ContainerNode;
-import org.opencadc.vospace.LinkNode;
 import org.opencadc.vospace.Node;
 import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.client.VOSpaceClient;
@@ -195,58 +193,6 @@ public abstract class StorageAction extends RestAction {
         return toURI(path);
     }
 
-//    void setInheritedPermissions(final Path nodePath) throws Exception {
-//        final ContainerNode parentNode = getCurrentNode();
-//        final Node newNode = getNode(nodePath, null);
-//        final Set<NodeProperty> newNodeProperties = newNode.getProperties();
-//
-//        // Clean slate.
-//        newNodeProperties.remove(new NodeProperty(VOS.PROPERTY_URI_GROUPREAD, ""));
-//        newNodeProperties.remove(new NodeProperty(VOS.PROPERTY_URI_GROUPWRITE, ""));
-//        newNodeProperties.remove(new NodeProperty(VOS.PROPERTY_URI_ISPUBLIC, ""));
-//
-//        final String parentReadGroupURIValue = parentNode.getPropertyValue(VOS.PROPERTY_URI_GROUPREAD);
-//        if (StringUtil.hasText(parentReadGroupURIValue)) {
-//            newNodeProperties.add(new NodeProperty(VOS.PROPERTY_URI_GROUPREAD, parentReadGroupURIValue));
-//        }
-//
-//        final String parentWriteGroupURIValue = parentNode.getPropertyValue(VOS.PROPERTY_URI_GROUPWRITE);
-//
-//        if (StringUtil.hasText(parentWriteGroupURIValue)) {
-//            newNodeProperties.add(new NodeProperty(VOS.PROPERTY_URI_GROUPWRITE, parentWriteGroupURIValue));
-//        }
-//
-//        final String isPublicValue = parentNode.getPropertyValue(VOS.PROPERTY_URI_ISPUBLIC);
-//        if (StringUtil.hasText(isPublicValue)) {
-//            newNodeProperties.add(new NodeProperty(VOS.PROPERTY_URI_ISPUBLIC, isPublicValue));
-//        }
-//
-//        setNodeSecure(newNode);
-//    }
-
-    /**
-     * Perform the HTTPS command to recursively set permissions for a node.
-     * Returns when job is complete, OR a maximum of (15) seconds has elapsed.
-     * If timeout has been reached, job will continue to run until is cancelled.
-     *
-     * @param newNode The Node whose permissions are to be recursively set
-     */
-    void setNodeRecursiveSecure(final Node newNode) throws Exception {
-        try {
-            Subject.doAs(getCurrentSubject(), (PrivilegedExceptionAction<Void>) () -> {
-                final RecursiveSetNode rj = getVOSpaceClient().createRecursiveSetNode(toURI(newNode), newNode);
-
-                // Fire & forget is 'false'. 'true' will mean the run job does not return until it's finished.
-                rj.setMonitor(false);
-                rj.run();
-
-                return null;
-            });
-        } catch (PrivilegedActionException pae) {
-            throw new IOException(pae.getException());
-        }
-    }
-
     protected Client getOIDCClient() throws IOException {
         return this.storageConfiguration.getOIDCClient();
     }
@@ -288,71 +234,12 @@ public abstract class StorageAction extends RestAction {
         return subject;
     }
 
-    /**
-     * Perform the HTTPS command.
-     *
-     * @param newNode The newly created Node.
-     */
-    void setNodeSecure(final Node newNode) throws Exception {
-        executeSecurely((PrivilegedExceptionAction<Void>) () -> {
-            getVOSpaceClient().setNode(toURI(newNode), newNode);
-            return null;
-        });
-    }
-
-
-    void createLink(final URI target) throws Exception {
-        createNode(toLinkNode(target));
-    }
-
-    private LinkNode toLinkNode(final URI target) {
-        final Path path = getCurrentPath();
-        final LinkNode linkNode = new LinkNode(path.getFileName().toString(), target);
-        PathUtils.augmentParents(path, linkNode);
-
-        return linkNode;
-    }
-
-    void createFolder() throws Exception {
-        createNode(toContainerNode());
-    }
-
-    private ContainerNode toContainerNode() {
-        final ContainerNode containerNode = new ContainerNode(getCurrentName());
-        PathUtils.augmentParents(getCurrentPath(), containerNode);
-
-        return containerNode;
-    }
-
-    void createNode(final Node newNode) throws Exception {
-        executeSecurely((PrivilegedExceptionAction<Void>) () -> {
-            getVOSpaceClient().createNode(toURI(newNode), newNode, false);
-            return null;
-        });
-    }
-
-    <T> T executeSecurely(final PrivilegedExceptionAction<T> runnable) throws Exception {
-        try {
-            return executeSecurely(getCurrentSubject(), runnable);
-        } catch (PrivilegedActionException e) {
-            throw e.getException();
-        }
-    }
-
-    <T> T executeSecurely(final Subject subject, final PrivilegedExceptionAction<T> runnable) throws Exception {
-        try {
-            return Subject.doAs(subject, runnable);
-        } catch (PrivilegedActionException e) {
-            throw e.getException();
-        }
-    }
-
     void redirectSeeOther(final String redirectURL) {
         this.syncOutput.setCode(HttpServletResponse.SC_SEE_OTHER);
         this.syncOutput.setHeader("location", redirectURL);
     }
 
     enum StorageItemContext {
-        FILE, FOLDER, LINK, LIST, PAGE
+        FILE, FOLDER, ITEM, LINK, LIST, RAW, PAGE, PKG
     }
 }

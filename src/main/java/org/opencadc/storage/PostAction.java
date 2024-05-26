@@ -68,22 +68,17 @@
 
 package org.opencadc.storage;
 
-import ca.nrc.cadc.net.TransientException;
-import ca.nrc.cadc.rest.InlineContentException;
 import ca.nrc.cadc.rest.InlineContentHandler;
-import net.canfar.storage.PathUtils;
+import java.nio.file.Path;
+import java.util.Objects;
 import org.json.JSONObject;
 import org.opencadc.storage.node.FileHandler;
 
-import java.io.IOException;
-import java.io.InputStream;
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.vospace.ContainerNode;
 
 
 public class PostAction extends StorageAction {
-    private final static String PAYLOAD_KEY = "payload";
-
     @Override
     public void doAction() throws Exception {
         final StorageItemContext storageItemType = getStorageItemType();
@@ -106,36 +101,34 @@ public class PostAction extends StorageAction {
         final ContainerNode containerNode = new ContainerNode(getCurrentName());
         PathUtils.augmentParents(getCurrentPath(), containerNode);
 
-        final JSONObject payload = (JSONObject) this.syncInput.getContent(PostAction.PAYLOAD_KEY);
+        final JSONObject payload = (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY);
         folderHandler.move(payload, containerNode);
     }
 
     private void handleFile() throws Exception {
-        final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
+        final boolean isInheritPermissions = this.syncInput.getContent("inheritPermissionsCheckBox") != null;
+        if (isInheritPermissions) {
+            final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
+            for (final String fileName : this.syncInput.getContentNames()) {
+                fileHandler.setInheritedPermissions((Path) this.syncInput.getContent(fileName));
+            }
+        }
     }
 
     @Override
     protected InlineContentHandler getInlineContentHandler() {
-        return new JSONInlineContentHandler();
-    }
-
-    private static class JSONInlineContentHandler implements InlineContentHandler {
-        @Override
-        public Content accept(String name, String contentType, InputStream inputStream)
-                throws InlineContentException, IOException, TransientException {
-            if (contentType != null && contentType.equals("application/json")) {
-                final String jsonString = new String(inputStream.readAllBytes());
-                final JSONObject jsonObject = new JSONObject(jsonString);
-                final InlineContentHandler.Content payloadContent = new InlineContentHandler.Content();
-                payloadContent.name = PostAction.PAYLOAD_KEY;
-                payloadContent.value = jsonObject;
-
-                return payloadContent;
+        try {
+            final StorageItemContext storageItemType = getStorageItemType();
+            if (Objects.requireNonNull(storageItemType) == StorageItemContext.FILE) {
+                return new FileUploadInlineContentHandler(this.currentService, null, getCurrentSubject());
             } else {
-                throw new InlineContentException("Unsupported content type: " + contentType);
+                return new JSONInlineContentHandler();
             }
+        } catch (Exception exception) {
+            throw new RuntimeException(exception.getMessage(), exception);
         }
     }
+
 
     private enum JSONFormInputs {
         PUBLIC_FLAG("public"),

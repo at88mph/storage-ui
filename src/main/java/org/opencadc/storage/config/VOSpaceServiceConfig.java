@@ -75,6 +75,7 @@ import org.opencadc.vospace.VOSURI;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import org.opencadc.vospace.client.VOSpaceClient;
 
 public class VOSpaceServiceConfig {
     private final String name;
@@ -145,6 +146,9 @@ public class VOSpaceServiceConfig {
         return toURI(path.toString());
     }
 
+    public VOSpaceClient getVOSpaceClient() {
+        return new VOSpaceClient(this.resourceID);
+    }
 
     /**
      * Features that require flags to disable it, or is generally optional.  Some Cavern style VOSpace services do not

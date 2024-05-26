@@ -78,7 +78,7 @@ import java.util.List;
 public class StorageActionTest {
     @Test
     public void getCurrentService() throws Exception {
-        final StorageAction storageAction = new StorageAction(null, null, null, null, null) {
+        final StorageAction storageAction = new StorageAction(null, null) {
             @Override
             public void doAction() throws Exception {
                 // do nothing.
