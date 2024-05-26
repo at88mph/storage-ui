@@ -68,29 +68,38 @@
 
 package org.opencadc.storage.node;
 
-import ca.nrc.cadc.rest.SyncOutput;
+import java.io.IOException;
+import java.io.Writer;
+import java.net.URI;
+import java.nio.file.Path;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import javax.security.auth.Subject;
 import net.canfar.storage.FileSizeRepresentation;
-import net.canfar.storage.web.restlet.JSONRepresentation;
+import net.canfar.storage.PathUtils;
 import org.apache.log4j.Logger;
-import org.json.JSONException;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.json.JSONWriter;
+import org.opencadc.storage.config.VOSpaceServiceConfig;
 import org.opencadc.vospace.ContainerNode;
 import org.opencadc.vospace.Node;
 import org.opencadc.vospace.NodeProperty;
 import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.client.VOSpaceClient;
+import org.opencadc.vospace.VOSURI;
+import org.opencadc.vospace.client.ClientTransfer;
+import org.opencadc.vospace.client.VOSClientUtil;
+import org.opencadc.vospace.transfer.Transfer;
 
-import javax.security.auth.Subject;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.nio.file.Path;
 
-public class FolderNodeHandler extends NodeHandler {
-    private static final Logger LOGGER = Logger.getLogger(FolderNodeHandler.class);
+public class FolderHandler extends StorageHandler {
+    private static final Logger LOGGER = Logger.getLogger(FolderHandler.class);
 
-    public FolderNodeHandler(VOSpaceClient voSpaceClient, Subject subject) {
-        super(voSpaceClient, subject);
+    public FolderHandler(VOSpaceServiceConfig currentService, Subject subject) {
+        super(currentService, subject);
     }
 
     /**
@@ -98,12 +107,10 @@ public class FolderNodeHandler extends NodeHandler {
      * path that contains the Quota property.
      *
      * @param nodePath The path to check.
-     * @return
      */
-    public void retrieveQuota(final Path nodePath, final SyncOutput syncOutput) throws IOException {
+    public void writeQuota(final Path nodePath, final Writer writer) throws IOException {
         final ContainerNode containerNodeWithQuota = getContainerNodeWithQuota(nodePath, 0);
-        final Writer streamWriter = new OutputStreamWriter(syncOutput.getOutputStream());
-        final JSONWriter writer = new JSONWriter(streamWriter);
+        final JSONWriter jsonWriter = new JSONWriter(writer);
 
         if (containerNodeWithQuota != null) {
             final long quotaSize = getQuotaPropertyValue(containerNodeWithQuota);
@@ -111,19 +118,98 @@ public class FolderNodeHandler extends NodeHandler {
             final String quotaString = FileSizeRepresentation.getSizeHumanReadable(quotaSize);
             final long folderSize = containerNodeWithQuota.bytesUsed == null ? -1 : containerNodeWithQuota.bytesUsed;
             final String remainingSizeString = FileSizeRepresentation.getSizeHumanReadable(
-                    ((quotaSize - folderSize) > 0) ? (quotaSize - folderSize) : 0);
+                ((quotaSize - folderSize) > 0) ? (quotaSize - folderSize) : 0);
 
-            writer.object()
-                  .key("size").value(remainingSizeString)
-                  .key("quota").value(quotaString)
-                  .endObject();
+            jsonWriter.object()
+                      .key("size").value(remainingSizeString)
+                      .key("quota").value(quotaString)
+                      .endObject();
         } else {
-            writer.object()
-                  .key("msg").value("quota not reported by VOSpace service")
-                  .endObject();
+            jsonWriter.object()
+                      .key("msg").value("quota not reported by VOSpace service")
+                      .endObject();
         }
 
-        streamWriter.flush();
+        writer.flush();
+    }
+
+    /**
+     * Create a new folder.  This is the handler for a PUT action.
+     *
+     * @param newFolderPath The path of the folder to create.
+     * @throws Exception If backend execution fails.
+     */
+    public void create(final Path newFolderPath) throws Exception {
+        createNode(toContainerNode(newFolderPath));
+    }
+
+    /**
+     * Move the source node URIs in the payload to the folder represented by the destination ContainerNode.
+     *
+     * @param payload         JSON Object containing a single URI string, or an array called <code>srcNodes</code> of URI strings.
+     * @param destinationNode The Node to move the payload to .
+     * @throws Exception If the transfer fails.
+     */
+    public void move(final JSONObject payload, final ContainerNode destinationNode) throws Exception {
+        LOGGER.debug("moveToFolder input: " + payload);
+
+        final Set<String> keySet = payload.keySet();
+
+        if (keySet.contains("srcNodes")) {
+            final Object srcNodeObject = payload.get("srcNodes");
+            final String[] srcNodes;
+            if (srcNodeObject instanceof JSONArray) {
+                final List<String> srcNodePaths = new ArrayList<>();
+                for (final Object o : (JSONArray) srcNodeObject) {
+                    srcNodePaths.add(o.toString());
+                }
+                srcNodes = srcNodePaths.toArray(new String[0]);
+            } else {
+                srcNodes = new String[] {srcNodeObject.toString()};
+            }
+
+            // iterate over each srcNode & call clientTransfer
+            for (final String srcNode : srcNodes) {
+                final VOSURI sourceURI = new VOSURI(URI.create(this.currentService.getNodeResourceID() + srcNode));
+                final VOSURI destinationURI = toURI(destinationNode);
+                LOGGER.debug("moving " + sourceURI + " to " + destinationURI.toString());
+                move(sourceURI, destinationURI);
+            }
+        }
+    }
+
+    private void move(final VOSURI source, final VOSURI destination) throws Exception {
+        // According to ivoa.net VOSpace 2.1 spec, a move is handled using
+        // a transfer. keepBytes = false. destination URI is the Direction.
+        final Transfer transfer = getTransfer(source, destination);
+
+        try {
+            Subject.doAs(this.subject,
+                         (PrivilegedExceptionAction<Void>) () -> {
+                             final ClientTransfer clientTransfer = getVOSpaceClient().createTransfer(transfer);
+                             clientTransfer.setMonitor(true);
+                             clientTransfer.runTransfer();
+
+                             LOGGER.debug("transfer run complete");
+                             VOSClientUtil.checkTransferFailure(clientTransfer);
+                             LOGGER.debug("no errors in transfer");
+                             return null;
+                         });
+        } catch (PrivilegedActionException e) {
+            LOGGER.debug("error in transfer.", e);
+            throw e.getException();
+        }
+    }
+
+    Transfer getTransfer(VOSURI source, VOSURI destination) {
+        return new Transfer(source.getURI(), destination.getURI(), false);
+    }
+
+    private ContainerNode toContainerNode(final Path newFolderPath) {
+        final ContainerNode containerNode = new ContainerNode(newFolderPath.getFileName().toString());
+        PathUtils.augmentParents(newFolderPath, containerNode);
+
+        return containerNode;
     }
 
     private ContainerNode getContainerNodeWithQuota(final Path path, final int pathElementIndex) {

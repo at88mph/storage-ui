@@ -71,7 +71,15 @@ package org.opencadc.storage.node;
 import ca.nrc.cadc.auth.NotAuthenticatedException;
 import ca.nrc.cadc.net.RemoteServiceException;
 import ca.nrc.cadc.reg.client.RegistryClient;
-import ca.nrc.cadc.rest.SyncOutput;
+import java.io.IOException;
+import java.net.URI;
+import java.nio.file.Path;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+import javax.security.auth.Subject;
 import net.canfar.storage.PathUtils;
 import org.opencadc.storage.config.VOSpaceServiceConfig;
 import org.opencadc.vospace.Node;
@@ -79,34 +87,25 @@ import org.opencadc.vospace.VOS;
 import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.client.VOSpaceClient;
 
-import javax.security.auth.Subject;
-import java.io.IOException;
-import java.net.URI;
-import java.nio.file.Path;
-import java.security.PrivilegedExceptionAction;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.stream.Collectors;
 
-public abstract class NodeHandler {
-    final VOSpaceClient voSpaceClient;
-    final Subject subject;
-    final VOSpaceServiceConfig currentService;
-    final SyncOutput syncOutput;
-
-
-    private NodeHandler(final VOSpaceClient voSpaceClient, final Subject subject) {
-        this.voSpaceClient = voSpaceClient;
-        this.subject = subject;
-    }
-
-
-
+public abstract class StorageHandler {
     // Page size for the initial page display.
     private static final int DEFAULT_DISPLAY_PAGE_SIZE = 35;
+    final Subject subject;
+    final VOSpaceServiceConfig currentService;
+
+
+    StorageHandler(final VOSpaceServiceConfig currentService, final Subject subject) {
+        this.subject = subject;
+        this.currentService = currentService;
+    }
 
     <T extends Node> T getNode(final Path nodePath) {
-        return getNode(nodePath, VOS.Detail.max, NodeHandler.DEFAULT_DISPLAY_PAGE_SIZE);
+        return getNode(nodePath, VOS.Detail.max, StorageHandler.DEFAULT_DISPLAY_PAGE_SIZE);
+    }
+
+    VOSpaceClient getVOSpaceClient() {
+        return new VOSpaceClient(this.currentService.getResourceID());
     }
 
     @SuppressWarnings("unchecked")
@@ -126,7 +125,7 @@ public abstract class NodeHandler {
 
         try {
             final T currentNode = Subject.doAs(subject, (PrivilegedExceptionAction<T>) () ->
-                    (T) voSpaceClient.getNode(nodePath.toString(), query));
+                (T) getVOSpaceClient().getNode(nodePath.toString(), query));
             if (currentNode != null) {
                 PathUtils.augmentParents(nodePath, currentNode);
             }
@@ -183,6 +182,21 @@ public abstract class NodeHandler {
         return getNode(nodePath, detail, pageSize);
     }
 
+    void createNode(final Node newNode) throws Exception {
+        executeSecurely((PrivilegedExceptionAction<Void>) () -> {
+            getVOSpaceClient().createNode(toURI(newNode), newNode, false);
+            return null;
+        });
+    }
+
+    <T> void executeSecurely(final PrivilegedExceptionAction<T> runnable) throws Exception {
+        try {
+            Subject.doAs(this.subject, runnable);
+        } catch (PrivilegedActionException e) {
+            throw e.getException();
+        }
+    }
+
     VOSURI toURI(final Path path) {
         return new VOSURI(URI.create(this.currentService.getNodeResourceID() + path.toString()));
     }
@@ -194,10 +208,5 @@ public abstract class NodeHandler {
 
     RegistryClient getRegistryClient() {
         return new RegistryClient();
-    }
-
-
-    public static final class NodeHandlerBuilder {
-
     }
 }

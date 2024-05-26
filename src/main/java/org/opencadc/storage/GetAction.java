@@ -69,11 +69,11 @@
 package org.opencadc.storage;
 
 
-import org.opencadc.storage.node.FolderNodeHandler;
-import org.opencadc.storage.node.LinkNodeHandler;
-import org.opencadc.vospace.NodeNotFoundException;
-
-import java.nio.file.Path;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import org.opencadc.storage.node.FileHandler;
+import org.opencadc.storage.node.FolderHandler;
+import org.opencadc.storage.node.LinkHandler;
 
 
 public class GetAction extends StorageAction {
@@ -89,18 +89,26 @@ public class GetAction extends StorageAction {
                 handleLink();
                 break;
             case FILE:
+                handleFile();
+                break;
             case LIST:
+            case PAGE:
         }
     }
 
     void handleFolder() throws Exception {
-        final FolderNodeHandler folderNodeHandler = new FolderNodeHandler(this.voSpaceClient, getCurrentSubject());
-        folderNodeHandler.retrieveQuota(getCurrentPath(), this.syncOutput);
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject());
+        final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
+        folderHandler.writeQuota(getCurrentPath(), writer);
     }
 
     void handleLink() throws Exception {
-        final LinkNodeHandler linkNodeHandler = new LinkNodeHandler(this.voSpaceClient, getCurrentSubject(),
-                                                                    this.storageItemFactory);
-        linkNodeHandler.resolve(getCurrentPath(), this.syncOutput);
+        final LinkHandler linkHandler = new LinkHandler(this.currentService, getCurrentSubject());
+        redirectSeeOther(linkHandler.resolve(getCurrentPath(), getStorageItemFactory()).toString());
+    }
+
+    void handleFile() throws Exception {
+        final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
+        redirectSeeOther(fileHandler.getDownloadEndpoint(getCurrentPath()));
     }
 }

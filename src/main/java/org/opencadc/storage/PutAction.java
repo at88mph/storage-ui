@@ -66,84 +66,12 @@
  ************************************************************************
  */
 
-package org.opencadc.storage.node;
+package org.opencadc.storage;
 
-import ca.nrc.cadc.rest.SyncOutput;
-import net.canfar.storage.web.view.StorageItem;
-import org.opencadc.storage.StorageItemFactory;
-import org.opencadc.vospace.LinkNode;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.NodeNotFoundException;
-import org.opencadc.vospace.VOSURI;
-import org.opencadc.vospace.client.VOSpaceClient;
 
-import javax.security.auth.Subject;
-import javax.servlet.http.HttpServletResponse;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+public class PutAction extends StorageAction {
+    @Override
+    public void doAction() throws Exception {
 
-public class LinkNodeHandler extends NodeHandler {
-    private final StorageItemFactory storageItemFactory;
-
-    public LinkNodeHandler(VOSpaceClient voSpaceClient, Subject subject, StorageItemFactory storageItemFactory) {
-        super(voSpaceClient, subject);
-        this.storageItemFactory = storageItemFactory;
-    }
-
-    /**
-     * Resolve this link Node's target to its final destination.  This method
-     * will follow the target of the provided LinkNode, and continue to do so
-     * until an external URL is found, or Node that is not a Link Node.
-     * <p>
-     * Finally, this method will redirect to the appropriate endpoint.
-     *
-     * @throws NodeNotFoundException If the target is not found
-     */
-    public void resolve(final Path nodePath, final SyncOutput syncOutput) throws NodeNotFoundException {
-        final LinkNode linkNode = getNode(nodePath);
-        final URI resolvedURI = resolve(linkNode);
-        syncOutput.setCode(HttpServletResponse.SC_SEE_OTHER);
-        syncOutput.setHeader("location", resolvedURI.toString());
-    }
-
-    /**
-     * Resolve the given LinkNode's target URI and return it.
-     *
-     * @param linkNode The LinkNode to resolve.
-     * @return URI of the target.
-     *
-     * @throws NodeNotFoundException If the target is not found.
-     */
-    private URI resolve(final LinkNode linkNode) throws NodeNotFoundException {
-        final URI endPoint;
-        final URI targetURI = linkNode.getTarget();
-
-        // Should ALWAYS be true for a LinkNode!
-        if (targetURI == null) {
-            throw new IllegalArgumentException("**BUG**: LinkNode has a null target!");
-        } else {
-            try {
-                final VOSURI vosURI = new VOSURI(targetURI);
-                final Node targetNode = getNode(Paths.get(vosURI.getPath()), null);
-
-                if (targetNode == null) {
-                    throw new NodeNotFoundException("No target found or broken link for node: " + linkNode.getName());
-                } else {
-                    if (targetNode instanceof LinkNode) {
-                        endPoint = resolve((LinkNode) targetNode);
-                    } else {
-                        final StorageItem storageItem = storageItemFactory.translate(targetNode);
-                        endPoint = URI.create(storageItem.getTargetPath());
-                    }
-                }
-            } catch (IllegalArgumentException | URISyntaxException e) {
-                // Not a VOSpace URI, so return this URI.
-                return targetURI;
-            }
-        }
-
-        return endPoint;
     }
 }

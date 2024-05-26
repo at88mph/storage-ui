@@ -105,6 +105,27 @@ Or deploy the `war` file in `build/libs` into a Java container such as Tomcat.
 
 Then, in your browser, look at <a href="http://localhost:8080/storage/list">http://localhost:8080/storage/list</a>.
 
+#### Browser access
+
+The endpoints are in the format of `/{contextPath}/{serviceName}/{action}/{path}`, where:
+
+| Path item     | Description                                                                                                                                                                                                             |
+|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `contextPath` | The name of the deployed application.  The default is `storage`                                                                                                                                                         |
+| `serviceName` | The name of the currently selected VOSpace backend service, as it appears in the pulldown menu and in the configuration file (e.g. `cavern`).  If this is omitted, the default value in the configuration file is used. |
+| `action`      | The item being requested.  Values are `folder`, `file`, `link`, `list`, and `page`                                                                                                                                      |
+| `path`        | The path of the currently visited folder, or the item being requested from a non-`list` request                                                                                                                         |
+
+For example, the default context path is `/storage`, so to get the list of items in the `/my/folder/path` folder:
+```shell
+open https://example.org/storage/myvospace/list/my/folder/path
+```
+
+To check the quota of a folder:
+```shell
+open https://example.org/storage/myvospace/folder/my/folder/path
+```
+
 #### Running with Docker
 
 See the [OpenCADC Docker repository](https://images.opencadc.org/harbor/projects/7/repositories/storage-ui)

@@ -68,100 +68,79 @@
 
 package org.opencadc.storage.node;
 
-import ca.nrc.cadc.auth.AuthMethod;
-import ca.nrc.cadc.auth.AuthenticationUtil;
-import ca.nrc.cadc.auth.AuthorizationToken;
-import ca.nrc.cadc.reg.Standards;
-import ca.nrc.cadc.rest.SyncOutput;
-import net.canfar.storage.PathUtils;
-import org.apache.log4j.Logger;
-import org.opencadc.vospace.DataNode;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.VOSURI;
-import org.opencadc.vospace.View;
-import org.opencadc.vospace.client.ClientTransfer;
-import org.opencadc.vospace.client.VOSpaceClient;
-import org.opencadc.vospace.transfer.Direction;
-import org.opencadc.vospace.transfer.Protocol;
-import org.opencadc.vospace.transfer.Transfer;
-
-import javax.security.auth.Subject;
 import java.net.URI;
-import java.net.URL;
+import java.net.URISyntaxException;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.Set;
+import java.nio.file.Paths;
+import javax.security.auth.Subject;
+import net.canfar.storage.web.view.StorageItem;
+import org.opencadc.storage.StorageItemFactory;
+import org.opencadc.storage.config.VOSpaceServiceConfig;
+import org.opencadc.vospace.LinkNode;
+import org.opencadc.vospace.Node;
+import org.opencadc.vospace.NodeNotFoundException;
+import org.opencadc.vospace.VOSURI;
 
-public class FileNodeHandler extends NodeHandler {
-    private static final Logger LOGGER = Logger.getLogger(FileNodeHandler.class);
-
-    public FileNodeHandler(VOSpaceClient voSpaceClient, Subject subject) {
-        super(voSpaceClient, subject);
-    }
-
-    public void download(final Path nodePath, final SyncOutput syncOutput) throws Exception {
-        final DataNode dataNode = getNode(nodePath, null, null);
-        download(dataNode);
-    }
-
-    void download(final DataNode dataNode) throws Exception {
-        final VOSURI dataNodeVOSURI = toURI(dataNode);
-        final AuthMethod authMethod = AuthenticationUtil.getAuthMethodFromCredentials(this.subject);
-        final URL baseURL = lookupDownloadEndpoint(dataNodeVOSURI.getServiceURI(), authMethod);
-
-        // Special handling for tokenized pre-auth URLs
-        if (Objects.requireNonNull(authMethod) == AuthMethod.TOKEN) {
-            final Set<AuthorizationToken> accessTokens = subject.getPublicCredentials(AuthorizationToken.class);
-            if (accessTokens.isEmpty()) {
-                redirectSeeOther(baseURL + dataNodeVOSURI.getPath());
-            } else {
-                redirectSeeOther(toEndpoint(dataNodeVOSURI.getURI()));
-            }
-        } else {
-            redirectSeeOther(baseURL + dataNodeVOSURI.getPath());
-        }
-        LOGGER.debug("Download URL: " + baseURL);
+public class LinkHandler extends StorageHandler {
+    public LinkHandler(VOSpaceServiceConfig currentService, Subject subject) {
+        super(currentService, subject);
     }
 
     /**
-     * Check both the new prototype and old Files service lookup endpoints.
-     * @param serviceURI    The URI that identifies the Service to use.
-     * @param authMethod    The AuthMethod interface to pick out.
-     * @return  URL, never null.
-     * @throws IllegalStateException if no URL can be found.
+     * Resolve this link Node's target to its final destination.  This method
+     * will follow the target of the provided LinkNode, and continue to do so
+     * until an external URL is found, or Node that is not a Link Node.
+     * <p>
+     * Finally, this method will redirect to the appropriate endpoint.
+     *
+     * @param nodePath           The Path of the LinkNode to resolve.
+     * @param storageItemFactory The StorageItemFactory to resolve the link.
+     * @throws NodeNotFoundException If the target is not found
      */
-    private URL lookupDownloadEndpoint(final URI serviceURI, final AuthMethod authMethod) {
-        final URI[] downloadEndpointStandards = new URI[] {
-                Standards.VOSPACE_FILES,
-                Standards.VOSPACE_FILES_20
-        };
+    public URI resolve(final Path nodePath, final StorageItemFactory storageItemFactory) throws NodeNotFoundException {
+        final LinkNode linkNode = getNode(nodePath);
+        return resolve(linkNode, storageItemFactory);
+    }
 
-        for (final URI uri : downloadEndpointStandards) {
-            final URL serviceURL = lookupDownloadEndpoint(serviceURI, uri, authMethod);
-            if (serviceURL != null) {
-                return serviceURL;
+    /**
+     * Resolve the given LinkNode's target URI and return it.
+     *
+     * @param linkNode The LinkNode to resolve.
+     * @return URI of the target.
+     * @throws NodeNotFoundException If the target is not found.
+     */
+    private URI resolve(final LinkNode linkNode, final StorageItemFactory storageItemFactory) throws NodeNotFoundException {
+        final URI endPoint;
+        final URI targetURI = linkNode.getTarget();
+
+        // Should ALWAYS be true for a LinkNode!
+        if (targetURI == null) {
+            throw new IllegalArgumentException("**BUG**: LinkNode has a null target!");
+        } else {
+            try {
+                final VOSURI vosURI = new VOSURI(targetURI);
+                final Node targetNode = getNode(Paths.get(vosURI.getPath()), null);
+
+                if (targetNode == null) {
+                    throw new NodeNotFoundException("No target found or broken link for node: " + linkNode.getName());
+                } else {
+                    if (targetNode instanceof LinkNode) {
+                        endPoint = resolve((LinkNode) targetNode, storageItemFactory);
+                    } else {
+                        final StorageItem storageItem = storageItemFactory.translate(targetNode);
+                        endPoint = URI.create(storageItem.getTargetPath());
+                    }
+                }
+            } catch (IllegalArgumentException | URISyntaxException e) {
+                // Not a VOSpace URI, so return this URI.
+                return targetURI;
             }
         }
 
-        throw new IllegalStateException("Incomplete configuration in the registry.  No endpoint for "
-                                        + serviceURI + " could be found from ("
-                                        + Arrays.toString(downloadEndpointStandards) + ")");
-    }
+        if (endPoint == null) {
+            throw new IllegalArgumentException("Link " + linkNode.getTarget() + " cannot be resolved.");
+        }
 
-    private URL lookupDownloadEndpoint(final URI serviceURI, final URI capabilityStandardURI,
-                                       final AuthMethod authMethod) {
-        return getRegistryClient().getServiceURL(serviceURI, capabilityStandardURI, authMethod);
-    }
-
-    String toEndpoint(final URI downloadURI) {
-        final Transfer transfer = new Transfer(downloadURI, Direction.pullFromVoSpace);
-        transfer.setView(new View(VOS.VIEW_DEFAULT));
-        transfer.getProtocols().add(new Protocol(VOS.PROTOCOL_HTTPS_GET));
-        transfer.version = VOS.VOSPACE_21;
-
-        final ClientTransfer ct = voSpaceClient.createTransfer(transfer);
-        return ct.getTransfer().getEndpoint();
+        return endPoint;
     }
 }

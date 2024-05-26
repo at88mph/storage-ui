@@ -68,20 +68,17 @@
 
 package org.opencadc.storage;
 
-import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.net.TransientException;
 import ca.nrc.cadc.rest.InlineContentException;
 import ca.nrc.cadc.rest.InlineContentHandler;
-import ca.nrc.cadc.util.StringUtil;
+import net.canfar.storage.PathUtils;
 import org.json.JSONObject;
-import org.opencadc.gms.GroupURI;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.VOS;
+import org.opencadc.storage.node.FileHandler;
 
-import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Set;
+import org.opencadc.storage.node.FolderHandler;
+import org.opencadc.vospace.ContainerNode;
 
 
 public class PostAction extends StorageAction {
@@ -89,52 +86,32 @@ public class PostAction extends StorageAction {
 
     @Override
     public void doAction() throws Exception {
-        final JSONObject jsonObject = (JSONObject) this.syncInput.getContent(PostAction.PAYLOAD_KEY);
+        final StorageItemContext storageItemType = getStorageItemType();
 
-        // limit=0, detail=min so should only get the current node
-        final Node currentNode = getCurrentNode(VOS.Detail.properties);
-        final Set<String> keySet = jsonObject.keySet();
-
-        if (keySet.contains(JSONFormInputs.PUBLIC_FLAG.fieldName)) {
-            currentNode.isPublic = jsonObject.get(JSONFormInputs.PUBLIC_FLAG.fieldName).equals("on");
-        } else {
-            currentNode.isPublic = false;
-            currentNode.clearIsPublic = true;
-        }
-
-        currentNode.getReadOnlyGroup().clear();
-        if (keySet.contains(JSONFormInputs.READ_GROUP_INPUT.fieldName)
-            && StringUtil.hasText(jsonObject.getString(JSONFormInputs.READ_GROUP_INPUT.fieldName))) {
-            final GroupURI newReadGroupURI =
-                    new GroupURI(storageConfiguration.getGroupURI(
-                            jsonObject.getString(JSONFormInputs.READ_GROUP_INPUT.fieldName)));
-            currentNode.getReadOnlyGroup().add(newReadGroupURI);
-        } else {
-            currentNode.clearReadOnlyGroups = true;
-        }
-
-        currentNode.getReadWriteGroup().clear();
-        if (keySet.contains(JSONFormInputs.WRITE_GROUP_INPUT.fieldName)
-            && StringUtil.hasText(jsonObject.getString(JSONFormInputs.WRITE_GROUP_INPUT.fieldName))) {
-            final GroupURI newReadWriteGroupURI =
-                    new GroupURI(storageConfiguration.getGroupURI(
-                            jsonObject.getString(JSONFormInputs.WRITE_GROUP_INPUT.fieldName)));
-            currentNode.getReadWriteGroup().add(newReadWriteGroupURI);
-        } else {
-            currentNode.clearReadWriteGroups = true;
-        }
-
-        // Recursively set permissions if requested
-        if (keySet.contains(JSONFormInputs.RECURSIVE_FLAG.fieldName)) {
-            if (jsonObject.get(JSONFormInputs.RECURSIVE_FLAG.fieldName).equals("on")) {
-                setNodeRecursiveSecure(currentNode);
-                this.syncOutput.setCode(HttpServletResponse.SC_ACCEPTED);
+        switch (storageItemType) {
+            case FOLDER:
+                handleFolder();
+                break;
+            case FILE:
+                handleFile();
+                break;
+            default: {
+                throw new UnsupportedOperationException("No POST supported for " + storageItemType);
             }
-        } else {
-            // Update the node properties
-            setNodeSecure(currentNode);
-            this.syncOutput.setCode(HttpServletResponse.SC_OK);
         }
+    }
+
+    private void handleFolder() throws Exception {
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject());
+        final ContainerNode containerNode = new ContainerNode(getCurrentName());
+        PathUtils.augmentParents(getCurrentPath(), containerNode);
+
+        final JSONObject payload = (JSONObject) this.syncInput.getContent(PostAction.PAYLOAD_KEY);
+        folderHandler.move(payload, containerNode);
+    }
+
+    private void handleFile() throws Exception {
+        final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
     }
 
     @Override

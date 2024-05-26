@@ -71,6 +71,6 @@ package org.opencadc.storage;
 public class DeleteAction extends StorageAction {
     @Override
     public void doAction() throws Exception {
-        voSpaceClient.deleteNode(getCurrentPath().toString());
+        getVOSpaceClient().deleteNode(getCurrentPath().toString());
     }
 }

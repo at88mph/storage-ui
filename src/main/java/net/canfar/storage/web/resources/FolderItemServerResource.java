@@ -187,6 +187,10 @@ public class FolderItemServerResource extends StorageItemServerResource {
         return (property == null) ? 0L : Long.parseLong(property.getValue());
     }
 
+    Transfer getTransfer(VOSURI source, VOSURI destination) {
+        return new Transfer(source.getURI(), destination.getURI(), false);
+    }
+
     @Post("json")
     public void moveToFolder(final JsonRepresentation payload) throws Exception {
         final JSONObject jsonObject = payload.getJsonObject();
@@ -218,10 +222,6 @@ public class FolderItemServerResource extends StorageItemServerResource {
             // move() will throw an exception if there is a problem
             getResponse().setStatus(Status.SUCCESS_OK);
         }
-    }
-
-    Transfer getTransfer(VOSURI source, VOSURI destination) {
-        return new Transfer(source.getURI(), destination.getURI(), false);
     }
 
     private void move(final VOSURI source, final VOSURI destination) throws Exception {

@@ -72,56 +72,40 @@ import ca.nrc.cadc.auth.AuthMethod;
 import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.AuthorizationToken;
 import ca.nrc.cadc.auth.AuthorizationTokenPrincipal;
-import ca.nrc.cadc.auth.NotAuthenticatedException;
-import ca.nrc.cadc.net.RemoteServiceException;
 import ca.nrc.cadc.rest.InlineContentHandler;
 import ca.nrc.cadc.rest.RestAction;
 import ca.nrc.cadc.util.StringUtil;
-import net.canfar.storage.PathUtils;
-import org.opencadc.storage.config.StorageConfiguration;
-import org.opencadc.storage.config.VOSpaceServiceConfig;
-import org.opencadc.storage.config.VOSpaceServiceConfigManager;
-import net.canfar.storage.web.view.StorageItem;
-import org.apache.log4j.Logger;
-import org.opencadc.token.Client;
-import org.opencadc.vospace.ContainerNode;
-import org.opencadc.vospace.LinkNode;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.NodeNotFoundException;
-import org.opencadc.vospace.NodeProperty;
-import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.VOSURI;
-import org.opencadc.vospace.client.VOSpaceClient;
-import org.opencadc.vospace.client.async.RecursiveSetNode;
-
-import javax.security.auth.Subject;
-import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Set;
-import java.util.stream.Collectors;
+import javax.security.auth.Subject;
+import javax.servlet.http.HttpServletResponse;
+import net.canfar.storage.PathUtils;
+import org.apache.log4j.Logger;
+import org.opencadc.storage.config.StorageConfiguration;
+import org.opencadc.storage.config.VOSpaceServiceConfig;
+import org.opencadc.storage.config.VOSpaceServiceConfigManager;
+import org.opencadc.token.Client;
+import org.opencadc.vospace.ContainerNode;
+import org.opencadc.vospace.LinkNode;
+import org.opencadc.vospace.Node;
+import org.opencadc.vospace.VOSURI;
+import org.opencadc.vospace.client.VOSpaceClient;
+import org.opencadc.vospace.client.async.RecursiveSetNode;
 
 
 public abstract class StorageAction extends RestAction {
+
     private static final Logger LOGGER = Logger.getLogger(StorageAction.class);
-
-    StorageItemFactory storageItemFactory;
-    VOSpaceClient voSpaceClient;
-    VOSpaceServiceConfig currentService;
-
     final StorageConfiguration storageConfiguration;
     private final VOSpaceServiceConfigManager voSpaceServiceConfigManager;
+    VOSpaceServiceConfig currentService;
 
     /**
      * Empty constructor needed for Restlet to manage it.  Needs to be public.
@@ -133,21 +117,18 @@ public abstract class StorageAction extends RestAction {
 
     /**
      * Only used for testing as no Request is coming through to initialize it as it would in Production.
-     * @param storageConfiguration          The StorageConfiguration object.
-     * @param voSpaceServiceConfigManager   The VOSpaceServiceConfigManager object.
-     * @param storageItemFactory            The StorageItemFactory object.
-     * @param voSpaceClient                 The VOSpaceClient object.
-     * @param serviceConfig                 The current VOSpace Service.
+     *
+     * @param storageConfiguration        The StorageConfiguration object.
+     * @param voSpaceServiceConfigManager The VOSpaceServiceConfigManager object.
      */
-    StorageAction(StorageConfiguration storageConfiguration,
-                  VOSpaceServiceConfigManager voSpaceServiceConfigManager,
-                  StorageItemFactory storageItemFactory,
-                  VOSpaceClient voSpaceClient, VOSpaceServiceConfig serviceConfig) {
+    StorageAction(StorageConfiguration storageConfiguration, VOSpaceServiceConfigManager voSpaceServiceConfigManager) {
         this.storageConfiguration = storageConfiguration;
         this.voSpaceServiceConfigManager = voSpaceServiceConfigManager;
-        this.storageItemFactory = storageItemFactory;
-        this.voSpaceClient = voSpaceClient;
-        this.currentService = serviceConfig;
+    }
+
+    @Override
+    public void initAction() throws Exception {
+        this.currentService = this.voSpaceServiceConfigManager.getServiceConfig(getCurrentVOSpaceService());
     }
 
     @Override
@@ -155,32 +136,18 @@ public abstract class StorageAction extends RestAction {
         return null;
     }
 
-    @Override
-    public void initAction() throws Exception {
-        if (this.currentService == null) {
-            // TODO: This will throw an IllegalArgumentException if the specified services name does not exist
-            // TODO: in this configuration, which will render as a 404 Not Found to the user.
-            // TODO: Could redirect to a chooser instead?
-            // TODO: jenkinsd 2024.05.20
-            this.currentService = this.voSpaceServiceConfigManager.getServiceConfig(getCurrentVOSpaceService());
-        }
 
-        if (this.voSpaceClient == null) {
-            this.voSpaceClient = new VOSpaceClient(this.currentService.getResourceID());
-        }
-
-        if (this.storageItemFactory == null) {
-            this.storageItemFactory = new StorageItemFactory(this.syncInput.getContextPath(), this.currentService);
-        }
-    }
-
-    Path getCurrentPath()  {
+    Path getCurrentPath() {
         final Path requestPath = getRequestPath();
         return requestPath.subpath(2, requestPath.getNameCount());
     }
 
     Path getRequestPath() {
         return Path.of(this.syncInput.getRequestPath());
+    }
+
+    StorageItemFactory getStorageItemFactory() {
+        return new StorageItemFactory(this.syncInput.getContextPath(), this.currentService);
     }
 
     StorageItemContext getStorageItemType() {
@@ -207,12 +174,12 @@ public abstract class StorageAction extends RestAction {
         return ret;
     }
 
-    List<String> getVOSpaceServiceList() {
-        return this.voSpaceServiceConfigManager.getServiceList();
+    VOSpaceClient getVOSpaceClient() {
+        return new VOSpaceClient(this.currentService.getResourceID());
     }
 
-    VOSURI getCurrentItemURI() {
-        return new VOSURI(URI.create(this.currentService.getNodeResourceID() + getCurrentPath().toString()));
+    List<String> getVOSpaceServiceList() {
+        return this.voSpaceServiceConfigManager.getServiceList();
     }
 
     String getCurrentName() {
@@ -267,7 +234,7 @@ public abstract class StorageAction extends RestAction {
     void setNodeRecursiveSecure(final Node newNode) throws Exception {
         try {
             Subject.doAs(getCurrentSubject(), (PrivilegedExceptionAction<Void>) () -> {
-                final RecursiveSetNode rj = voSpaceClient.createRecursiveSetNode(toURI(newNode), newNode);
+                final RecursiveSetNode rj = getVOSpaceClient().createRecursiveSetNode(toURI(newNode), newNode);
 
                 // Fire & forget is 'false'. 'true' will mean the run job does not return until it's finished.
                 rj.setMonitor(false);
@@ -289,29 +256,22 @@ public abstract class StorageAction extends RestAction {
         final Subject subject = AuthenticationUtil.getCurrentSubject();
 
         if (StringUtil.hasText(rawCookieHeader)) {
-            final String[] firstPartyCookies =
-                    Arrays.stream(rawCookieHeader.split(";"))
-                          .map(String::trim)
-                          .filter(cookieString -> cookieString.startsWith(
-                                  StorageConfiguration.FIRST_PARTY_COOKIE_NAME))
-                          .toArray(String[]::new);
+            final String[] firstPartyCookies = Arrays.stream(rawCookieHeader.split(";")).map(String::trim)
+                                                     .filter(cookieString -> cookieString.startsWith(StorageConfiguration.FIRST_PARTY_COOKIE_NAME))
+                                                     .toArray(String[]::new);
 
             if (firstPartyCookies.length > 0 && storageConfiguration.isOIDCConfigured()) {
                 for (final String cookie : firstPartyCookies) {
                     // Only split on the first "=" symbol, and trim any wrapping double quotes
-                    final String encryptedCookieValue =
-                            cookie.split("=", 2)[1].replaceAll("\"", "");
+                    final String encryptedCookieValue = cookie.split("=", 2)[1].replaceAll("\"", "");
 
                     try {
                         final String accessToken = getOIDCClient().getAccessToken(encryptedCookieValue);
 
                         subject.getPrincipals().add(new AuthorizationTokenPrincipal(AuthenticationUtil.AUTHORIZATION_HEADER,
-                                                                                    AuthenticationUtil.CHALLENGE_TYPE_BEARER
-                                                                                    + " " + accessToken));
-                        subject.getPublicCredentials().add(
-                                new AuthorizationToken(AuthenticationUtil.CHALLENGE_TYPE_BEARER, accessToken,
-                                                       Collections.singletonList(
-                                                               URI.create(syncInput.getRequestURI()).getHost())));
+                                                                                    AuthenticationUtil.CHALLENGE_TYPE_BEARER + " " + accessToken));
+                        subject.getPublicCredentials().add(new AuthorizationToken(AuthenticationUtil.CHALLENGE_TYPE_BEARER, accessToken,
+                                                                                  Collections.singletonList(URI.create(syncInput.getRequestURI()).getHost())));
                     } catch (NoSuchElementException noTokenForKeyInCacheException) {
                         LOGGER.warn("Cookie found and decrypted but no value in cache.  Ignoring cookie...");
                     }
@@ -319,8 +279,7 @@ public abstract class StorageAction extends RestAction {
 
                 if (!subject.getPrincipals(AuthorizationTokenPrincipal.class).isEmpty()) {
                     // Ensure it's clean first.
-                    subject.getPublicCredentials(AuthMethod.class)
-                           .forEach(authMethod -> subject.getPublicCredentials().remove(authMethod));
+                    subject.getPublicCredentials(AuthMethod.class).forEach(authMethod -> subject.getPublicCredentials().remove(authMethod));
                     subject.getPublicCredentials().add(AuthMethod.TOKEN);
                 }
             }
@@ -336,7 +295,7 @@ public abstract class StorageAction extends RestAction {
      */
     void setNodeSecure(final Node newNode) throws Exception {
         executeSecurely((PrivilegedExceptionAction<Void>) () -> {
-            voSpaceClient.setNode(toURI(newNode), newNode);
+            getVOSpaceClient().setNode(toURI(newNode), newNode);
             return null;
         });
     }
@@ -367,7 +326,7 @@ public abstract class StorageAction extends RestAction {
 
     void createNode(final Node newNode) throws Exception {
         executeSecurely((PrivilegedExceptionAction<Void>) () -> {
-            voSpaceClient.createNode(toURI(newNode), newNode, false);
+            getVOSpaceClient().createNode(toURI(newNode), newNode, false);
             return null;
         });
     }
@@ -388,7 +347,12 @@ public abstract class StorageAction extends RestAction {
         }
     }
 
+    void redirectSeeOther(final String redirectURL) {
+        this.syncOutput.setCode(HttpServletResponse.SC_SEE_OTHER);
+        this.syncOutput.setHeader("location", redirectURL);
+    }
+
     enum StorageItemContext {
-        FILE, FOLDER, LINK, LIST
+        FILE, FOLDER, LINK, LIST, PAGE
     }
 }

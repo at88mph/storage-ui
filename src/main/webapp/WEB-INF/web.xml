@@ -6,22 +6,6 @@
 
     <display-name>Storage UI</display-name>
 
-    <!-- Here just for development. -->
-    <context-param>
-        <param-name>debug</param-name>
-        <param-value>false</param-value>
-    </context-param>
-
-<!--    <filter>-->
-<!--        <filter-name>WebAccessControlFilter</filter-name>-->
-<!--        <filter-class>ca.nrc.cadc.web.WebAccessControlFilter</filter-class>-->
-<!--    </filter>-->
-
-<!--    <filter-mapping>-->
-<!--        <filter-name>WebAccessControlFilter</filter-name>-->
-<!--        <url-pattern>/*</url-pattern>-->
-<!--    </filter-mapping>-->
-
     <servlet>
         <servlet-name>logControl</servlet-name>
         <servlet-class>ca.nrc.cadc.log.LogControlServlet</servlet-class>
@@ -43,17 +27,23 @@
     </servlet>
 
     <servlet>
-        <servlet-name>Restlet</servlet-name>
-        <servlet-class>org.restlet.ext.servlet.ServerServlet</servlet-class>
-
+        <servlet-name>RestServlet</servlet-name>
+        <servlet-class>ca.nrc.cadc.rest.RestServlet</servlet-class>
         <init-param>
-            <param-name>org.restlet.application</param-name>
-            <param-value>net.canfar.storage.web.restlet.StorageApplication</param-value>
+            <param-name>get</param-name>
+            <param-value>org.opencadc.storage.GetAction</param-value>
         </init-param>
-
         <init-param>
-            <param-name>org.restlet.clients</param-name>
-            <param-value>HTTP FILE</param-value>
+            <param-name>post</param-name>
+            <param-value>org.opencadc.storage.PostAction</param-value>
+        </init-param>
+        <init-param>
+            <param-name>delete</param-name>
+            <param-value>org.opencadc.storage.DeleteAction</param-value>
+        </init-param>
+        <init-param>
+            <param-name>put</param-name>
+            <param-value>org.opencadc.storage.PutAction</param-value>
         </init-param>
     </servlet>
 
@@ -69,7 +59,7 @@
 
     <!-- Application logic. -->
     <servlet-mapping>
-        <servlet-name>Restlet</servlet-name>
+        <servlet-name>RestServlet</servlet-name>
         <url-pattern>/*</url-pattern>
     </servlet-mapping>
 
