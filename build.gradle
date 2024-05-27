@@ -48,17 +48,17 @@ dependencies {
 sourceCompatibility = 11
 
 war {
-    archiveName 'storage.war'
-    rootSpec.exclude("themes")
+    archiveName "storage.war"
+//    exclude("themes")
 }
 
-tasks.register('bundleTemplates', Copy) {
+tasks.register("bundleTemplates", Copy) {
     from("${projectDir}/src/main/webapp")
     include("themes")
-    into("./build/classes")
+    into("${projectDir}/gradle")
 }
 
-war.dependsOn("bundleTemplates")
+build.dependsOn("bundleTemplates")
 
 ext {
     // VOSpace service values. Change alt_vospace_service if necessary
