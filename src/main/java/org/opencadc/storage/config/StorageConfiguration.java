@@ -68,11 +68,12 @@
 
 package org.opencadc.storage.config;
 
-import ca.nrc.cadc.ac.client.GMSClient;
-import ca.nrc.cadc.accesscontrol.AccessControlClient;
-import ca.nrc.cadc.reg.Standards;
-import ca.nrc.cadc.reg.client.LocalAuthority;
 import ca.nrc.cadc.util.StringUtil;
+import freemarker.cache.URLTemplateLoader;
+import freemarker.template.TemplateModelException;
+import java.net.MalformedURLException;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.commons.configuration2.CombinedConfiguration;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.configuration2.PropertiesConfiguration;
@@ -83,10 +84,10 @@ import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.configuration2.tree.MergeCombiner;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.opencadc.storage.view.FreeMarkerConfiguration;
 import org.opencadc.token.Client;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.URL;
 
 public class StorageConfiguration {
@@ -127,11 +128,6 @@ public class StorageConfiguration {
         return lookupStringArray(StorageConfigurationKey.SERVICE_NAME);
     }
 
-    public URI getGMSServiceURI() {
-        final LocalAuthority localAuthority = new LocalAuthority();
-        return localAuthority.getServiceURI(Standards.GMS_SEARCH_10.toASCIIString());
-    }
-
     public String getTokenCacheURLString() {
         return lookup(StorageConfigurationKey.TOKEN_CACHE_URL);
     }
@@ -170,18 +166,6 @@ public class StorageConfiguration {
         return new Client(getOIDCClientID(), getOIDCClientSecret(),
                           new URL(getOIDCCallbackURI()), new URL(getOIDCRedirectURI()),
                           getOIDCScope().split(" "), getTokenCacheURLString());
-    }
-
-    public GMSClient getGMSClient() {
-        return new GMSClient(getGMSServiceURI());
-    }
-
-    public URI getGroupURI(final String groupName) {
-        return URI.create(getGMSServiceURI() + "?" + groupName);
-    }
-
-    public AccessControlClient getAccessControlClient() {
-        return new AccessControlClient(getGMSServiceURI());
     }
 
     String lookup(final StorageConfigurationKey key) {
@@ -229,6 +213,34 @@ public class StorageConfiguration {
         }
 
         return propertyValues;
+    }
+
+    public FreeMarkerConfiguration getFreeMarkerConfiguration(final String servletPath) {
+        final FreeMarkerConfiguration freeMarkerConfiguration = new FreeMarkerConfiguration();
+        try {
+            freeMarkerConfiguration.setSharedVariable("contextPath", servletPath + (servletPath.endsWith("/") ? "" : "/"));
+        } catch (TemplateModelException templateModelException) {
+            throw new IllegalStateException("Bad servlet path: " + templateModelException.getMessage(), templateModelException);
+        }
+
+        if (getThemeName().equalsIgnoreCase("canfar")) {
+            final Map<String, URL> uriTemplateLoader = new HashMap<>();
+            try {
+                uriTemplateLoader.put("themes/canfar/canfar-application-header",
+                                      new URL("https://www.canfar.net/canfar/includes/_application_header.shtml"));
+            } catch (MalformedURLException urlException) {
+                // Should NEVER happen.
+                throw new IllegalStateException(urlException.getMessage(), urlException);
+            }
+            freeMarkerConfiguration.addTemplateLoader(new URLTemplateLoader() {
+                @Override
+                protected URL getURL(String name) {
+                    return uriTemplateLoader.get(name);
+                }
+            });
+        }
+
+        return freeMarkerConfiguration;
     }
 
     enum StorageConfigurationKey {

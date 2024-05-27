@@ -68,22 +68,34 @@
 
 package org.opencadc.storage.node;
 
-import java.io.IOException;
+import ca.nrc.cadc.util.StringUtil;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.security.auth.Subject;
 import net.canfar.storage.FileSizeRepresentation;
 import net.canfar.storage.PathUtils;
+import net.canfar.storage.StorageItemCSVWriter;
+import net.canfar.storage.StorageItemWriter;
+import net.canfar.storage.web.view.FolderItem;
+import net.canfar.storage.web.view.StorageItem;
 import org.apache.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONWriter;
+import org.opencadc.storage.StorageItemFactory;
 import org.opencadc.storage.config.VOSpaceServiceConfig;
 import org.opencadc.vospace.ContainerNode;
 import org.opencadc.vospace.Node;
@@ -93,6 +105,10 @@ import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.client.ClientTransfer;
 import org.opencadc.vospace.client.VOSClientUtil;
 import org.opencadc.vospace.transfer.Transfer;
+import org.restlet.data.MediaType;
+import org.restlet.ext.freemarker.TemplateRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.resource.ResourceException;
 
 
 public class FolderHandler extends StorageHandler {
@@ -108,7 +124,7 @@ public class FolderHandler extends StorageHandler {
      *
      * @param nodePath The path to check.
      */
-    public void writeQuota(final Path nodePath, final Writer writer) throws IOException {
+    public void writeQuota(final Path nodePath, final Writer writer) throws Exception {
         final ContainerNode containerNodeWithQuota = getContainerNodeWithQuota(nodePath, 0);
         final JSONWriter jsonWriter = new JSONWriter(writer);
 
@@ -171,11 +187,71 @@ public class FolderHandler extends StorageHandler {
             // iterate over each srcNode & call clientTransfer
             for (final String srcNode : srcNodes) {
                 final VOSURI sourceURI = new VOSURI(URI.create(this.currentService.getNodeResourceID() + srcNode));
-                final VOSURI destinationURI = toURI(destinationNode);
+                final VOSURI destinationURI = this.currentService.toURI(destinationNode);
                 LOGGER.debug("moving " + sourceURI + " to " + destinationURI.toString());
                 move(sourceURI, destinationURI);
             }
         }
+    }
+
+    /**
+     * Iterate over the
+     *
+     * @param path
+     * @param storageItemFactory
+     * @throws Exception
+     */
+    public Iterator<String> iterator(final Path path, final StorageItemFactory storageItemFactory) throws Exception {
+        final ContainerNode containerNode = getNode(path);
+        final Path parentPath = PathUtils.toPath(containerNode);
+        final VOSURI startNextPageURI;
+        final Iterator<Node> childNodeIterator;
+        if (currentService.supportsPaging()) {
+            final List<Node> childNodes = containerNode.getNodes();
+            if (childNodes.isEmpty()) {
+                startNextPageURI = null;
+                childNodeIterator = Collections.emptyIterator();
+            } else {
+                final Node nextNode = childNodes.get(childNodes.size() - 1);
+                nextNode.parent = containerNode;
+                PathUtils.augmentParents(PathUtils.toPath(nextNode), nextNode);
+                startNextPageURI = childNodes.isEmpty() ? null : this.currentService.toURI(nextNode);
+                childNodeIterator = childNodes.iterator();
+            }
+        } else {
+            childNodeIterator = containerNode.childIterator == null
+                                ? containerNode.getNodes().iterator()
+                                : containerNode.childIterator;
+            startNextPageURI = null;
+        }
+
+        return new Iterator<>() {
+            @Override
+            public boolean hasNext() {
+                return childNodeIterator.hasNext();
+            }
+
+            @Override
+            public String next() {
+                final Writer writer = new StringWriter();
+                final StorageItemWriter storageItemWriter = new StorageItemCSVWriter(writer);
+                final Node nextChild = childNodeIterator.next();
+                PathUtils.augmentParents(Paths.get(parentPath.toString(), nextChild.getName()), nextChild);
+
+                try {
+                    // Check the translated storage item's URI first to handle an exception.
+                    final StorageItem storageItem = storageItemFactory.translate(nextChild);
+
+                    storageItemWriter.write(storageItem);
+                } catch (URISyntaxException uriSyntaxException) {
+                    LOGGER.error("Cannot create a URI from node {}.  Skipping over " + nextChild.getName(), uriSyntaxException);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+
+                return writer.toString();
+            }
+        };
     }
 
     private void move(final VOSURI source, final VOSURI destination) throws Exception {
@@ -212,7 +288,7 @@ public class FolderHandler extends StorageHandler {
         return containerNode;
     }
 
-    private ContainerNode getContainerNodeWithQuota(final Path path, final int pathElementIndex) {
+    private ContainerNode getContainerNodeWithQuota(final Path path, final int pathElementIndex) throws Exception {
         if (path == null) {
             return null;
         }

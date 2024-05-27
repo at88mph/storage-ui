@@ -71,33 +71,87 @@ package org.opencadc.storage.node;
 import ca.nrc.cadc.auth.NotAuthenticatedException;
 import ca.nrc.cadc.net.RemoteServiceException;
 import ca.nrc.cadc.reg.client.RegistryClient;
+import ca.nrc.cadc.util.StringUtil;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Path;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import javax.security.auth.Subject;
 import net.canfar.storage.PathUtils;
+import org.json.JSONObject;
+import org.opencadc.gms.GroupURI;
 import org.opencadc.storage.config.VOSpaceServiceConfig;
 import org.opencadc.vospace.Node;
 import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.client.VOSpaceClient;
+import org.opencadc.vospace.client.async.RecursiveSetNode;
 
 
-public abstract class StorageHandler {
+public class StorageHandler {
     // Page size for the initial page display.
     private static final int DEFAULT_DISPLAY_PAGE_SIZE = 35;
     final Subject subject;
     final VOSpaceServiceConfig currentService;
 
 
-    StorageHandler(final VOSpaceServiceConfig currentService, final Subject subject) {
+    public StorageHandler(final VOSpaceServiceConfig currentService, final Subject subject) {
         this.subject = subject;
         this.currentService = currentService;
+    }
+
+    /**
+     * Update the permissions (Groups and public flag) for the given Path's Node.
+     * @param path  The Path to update.
+     * @param jsonObject    The JSON containing form entries.
+     * @return  True if the recursive flag is set, False otherwise.
+     * @throws Exception    If VOSpace interaction errors.
+     */
+    public boolean updatePermissions(final Path path, final JSONObject jsonObject) throws Exception {
+        // limit=0, detail=min so should only get the current node
+        final Node currentNode = getNode(path, VOS.Detail.properties);
+        final Set<String> keySet = jsonObject.keySet();
+
+        if (keySet.contains(JSONFormInputs.PUBLIC_FLAG.fieldName)) {
+            currentNode.isPublic = jsonObject.get(JSONFormInputs.PUBLIC_FLAG.fieldName).equals("on");
+        } else {
+            currentNode.isPublic = false;
+            currentNode.clearIsPublic = true;
+        }
+
+        currentNode.getReadOnlyGroup().clear();
+        if (keySet.contains(JSONFormInputs.READ_GROUP_URIS.fieldName) && StringUtil.hasText(jsonObject.getString(JSONFormInputs.READ_GROUP_URIS.fieldName))) {
+            final GroupURI newReadGroupURI =
+                new GroupURI(VOSpaceServiceConfig.getGroupURI(jsonObject.getString(JSONFormInputs.READ_GROUP_URIS.fieldName)));
+            currentNode.getReadOnlyGroup().add(newReadGroupURI);
+        } else {
+            currentNode.clearReadOnlyGroups = true;
+        }
+
+        currentNode.getReadWriteGroup().clear();
+        if (keySet.contains(JSONFormInputs.WRITE_GROUP_URIS.fieldName) && StringUtil.hasText(jsonObject.getString(JSONFormInputs.WRITE_GROUP_URIS.fieldName))) {
+            final GroupURI newReadWriteGroupURI =
+                new GroupURI(VOSpaceServiceConfig.getGroupURI(jsonObject.getString(JSONFormInputs.WRITE_GROUP_URIS.fieldName)));
+            currentNode.getReadWriteGroup().add(newReadWriteGroupURI);
+        } else {
+            currentNode.clearReadWriteGroups = true;
+        }
+
+        final boolean isRecursive = keySet.contains(JSONFormInputs.RECURSIVE_FLAG.fieldName)
+                                    && jsonObject.get(JSONFormInputs.RECURSIVE_FLAG.fieldName).equals("on");
+
+        // Recursively set permissions if requested
+        if (isRecursive) {
+            setNodeRecursiveSecure(currentNode);
+        } else {
+            // Update the node properties
+            setNodeSecure(currentNode);
+        }
+
+        return isRecursive;
     }
 
     <T extends Node> T getNode(final Path nodePath) throws Exception {
@@ -186,6 +240,42 @@ public abstract class StorageHandler {
         });
     }
 
+    /**
+     * Perform the HTTPS command to recursively set permissions for a node.
+     * Returns when job is complete, OR a maximum of (15) seconds has elapsed.
+     * If timeout has been reached, job will continue to run until is cancelled.
+     *
+     * @param newNode The Node whose permissions are to be recursively set
+     */
+    private void setNodeRecursiveSecure(final Node newNode) throws Exception {
+        try {
+            Subject.doAs(this.subject, (PrivilegedExceptionAction<Void>) () -> {
+                final RecursiveSetNode rj = this.currentService.getVOSpaceClient().createRecursiveSetNode(this.currentService.toURI(newNode), newNode);
+
+                // Fire & forget is 'false'. 'true' will mean the run job does not return until it's finished.
+                rj.setMonitor(false);
+                rj.run();
+
+                return null;
+            });
+        } catch (PrivilegedActionException pae) {
+            throw new IOException(pae.getException());
+        }
+    }
+
+
+    /**
+     * Perform the HTTPS command.
+     *
+     * @param newNode The newly created Node.
+     */
+    private void setNodeSecure(final Node newNode) throws Exception {
+        executeSecurely((PrivilegedExceptionAction<Void>) () -> {
+            this.currentService.getVOSpaceClient().setNode(this.currentService.toURI(newNode), newNode);
+            return null;
+        });
+    }
+
     <T> T executeSecurely(final PrivilegedExceptionAction<T> runnable) throws Exception {
         try {
             return Subject.doAs(this.subject, runnable);
@@ -196,5 +286,18 @@ public abstract class StorageHandler {
 
     RegistryClient getRegistryClient() {
         return new RegistryClient();
+    }
+
+    private enum JSONFormInputs {
+        PUBLIC_FLAG("publicPermission"),
+        READ_GROUP_URIS("readGroup"),
+        WRITE_GROUP_URIS("writeGroup"),
+        RECURSIVE_FLAG("recursive");
+
+        final String fieldName;
+
+        JSONFormInputs(String fieldName) {
+            this.fieldName = fieldName;
+        }
     }
 }

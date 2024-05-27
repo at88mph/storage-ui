@@ -67,6 +67,8 @@
  */
 package org.opencadc.storage.config;
 
+import ca.nrc.cadc.reg.Standards;
+import ca.nrc.cadc.reg.client.LocalAuthority;
 import ca.nrc.cadc.util.StringUtil;
 import net.canfar.storage.PathUtils;
 import org.opencadc.vospace.Node;
@@ -144,6 +146,15 @@ public class VOSpaceServiceConfig {
     public VOSURI toURI(final Node node) throws URISyntaxException {
         final Path path = PathUtils.toPath(node);
         return toURI(path.toString());
+    }
+
+    public static URI getGroupURI(final String groupName) {
+        return URI.create(VOSpaceServiceConfig.getGMSServiceURI() + "?" + groupName);
+    }
+
+    public static URI getGMSServiceURI() {
+        final LocalAuthority localAuthority = new LocalAuthority();
+        return localAuthority.getServiceURI(Standards.GMS_SEARCH_10.toASCIIString());
     }
 
     public VOSpaceClient getVOSpaceClient() {

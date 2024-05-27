@@ -72,30 +72,25 @@ import ca.nrc.cadc.auth.AuthMethod;
 import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.AuthorizationToken;
 import ca.nrc.cadc.auth.AuthorizationTokenPrincipal;
+import ca.nrc.cadc.auth.IdentityManager;
 import ca.nrc.cadc.rest.InlineContentHandler;
 import ca.nrc.cadc.rest.RestAction;
 import ca.nrc.cadc.util.StringUtil;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
 import javax.security.auth.Subject;
 import javax.servlet.http.HttpServletResponse;
-import net.canfar.storage.PathUtils;
 import org.apache.log4j.Logger;
 import org.opencadc.storage.config.StorageConfiguration;
 import org.opencadc.storage.config.VOSpaceServiceConfig;
 import org.opencadc.storage.config.VOSpaceServiceConfigManager;
 import org.opencadc.token.Client;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.client.VOSpaceClient;
-import org.opencadc.vospace.client.async.RecursiveSetNode;
 
 
 public abstract class StorageAction extends RestAction {
@@ -184,15 +179,6 @@ public abstract class StorageAction extends RestAction {
         return getCurrentPath().getFileName().toString();
     }
 
-    VOSURI toURI(final Path path) {
-        return new VOSURI(URI.create(this.currentService.getNodeResourceID() + path.toString()));
-    }
-
-    VOSURI toURI(final Node node) {
-        final Path path = PathUtils.toPath(node);
-        return toURI(path);
-    }
-
     protected Client getOIDCClient() throws IOException {
         return this.storageConfiguration.getOIDCClient();
     }
@@ -232,6 +218,11 @@ public abstract class StorageAction extends RestAction {
         }
 
         return subject;
+    }
+
+    protected String getDisplayName() throws Exception {
+        final IdentityManager identityManager = AuthenticationUtil.getIdentityManager();
+        return identityManager.toDisplayString(getCurrentSubject());
     }
 
     void redirectSeeOther(final String redirectURL) {

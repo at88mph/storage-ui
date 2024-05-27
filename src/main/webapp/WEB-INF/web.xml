@@ -81,11 +81,6 @@
 
     <servlet-mapping>
         <servlet-name>default</servlet-name>
-        <url-pattern>/images/*</url-pattern>
-    </servlet-mapping>
-
-    <servlet-mapping>
-        <servlet-name>default</servlet-name>
         <url-pattern>/fonts/*</url-pattern>
     </servlet-mapping>
 

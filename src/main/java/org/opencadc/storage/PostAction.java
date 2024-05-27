@@ -71,10 +71,12 @@ package org.opencadc.storage;
 import ca.nrc.cadc.rest.InlineContentHandler;
 import java.nio.file.Path;
 import java.util.Objects;
+import javax.servlet.http.HttpServletResponse;
 import org.json.JSONObject;
 import org.opencadc.storage.node.FileHandler;
 
 import org.opencadc.storage.node.FolderHandler;
+import org.opencadc.storage.node.StorageHandler;
 import org.opencadc.vospace.ContainerNode;
 
 
@@ -89,6 +91,9 @@ public class PostAction extends StorageAction {
                 break;
             case FILE:
                 handleFile();
+                break;
+            case ITEM:
+                handleItem();
                 break;
             default: {
                 throw new UnsupportedOperationException("No POST supported for " + storageItemType);
@@ -115,6 +120,13 @@ public class PostAction extends StorageAction {
         }
     }
 
+    private void handleItem() throws Exception {
+        final StorageHandler storageHandler = new StorageHandler(this.currentService, getCurrentSubject());
+        final boolean isRecursiveSet = storageHandler.updatePermissions(getCurrentPath(),
+                                                                        (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY));
+        this.syncOutput.setCode(isRecursiveSet ? HttpServletResponse.SC_ACCEPTED : HttpServletResponse.SC_OK);
+    }
+
     @Override
     protected InlineContentHandler getInlineContentHandler() {
         try {
@@ -126,20 +138,6 @@ public class PostAction extends StorageAction {
             }
         } catch (Exception exception) {
             throw new RuntimeException(exception.getMessage(), exception);
-        }
-    }
-
-
-    private enum JSONFormInputs {
-        PUBLIC_FLAG("public"),
-        READ_GROUP_INPUT("readGroup"),
-        WRITE_GROUP_INPUT("writeGroup"),
-        RECURSIVE_FLAG("recursive");
-
-        final String fieldName;
-
-        JSONFormInputs(String fieldName) {
-            this.fieldName = fieldName;
         }
     }
 }
