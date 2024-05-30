@@ -111,7 +111,7 @@ public class GetAction extends StorageAction {
     }
 
     void handleFolder() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject());
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
         final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
         folderHandler.writeQuota(getCurrentPath(), writer);
     }
@@ -127,12 +127,8 @@ public class GetAction extends StorageAction {
     }
 
     void handleList() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject());
-        final String pathString = getCurrentPath().toString();
-        final VOS.Detail detail = (!StringUtil.hasText(pathString) || pathString.trim().equals("/"))
-                                  ? VOS.Detail.raw : VOS.Detail.max;
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
         final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
-//        final FreeMarkerConfiguration freeMarkerConfiguration = this.storageConfiguration.getFreeMarkerConfiguration(this.syncInput.getContextPath());
         folderHandler.writePage(getCurrentPath(), null, getVOSpaceServiceList(), getDisplayName(),
                                 this.storageConfiguration.getFreeMarkerConfiguration(this.syncInput.getContextPath()), writer);
     }

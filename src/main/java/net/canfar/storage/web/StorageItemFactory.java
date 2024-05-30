@@ -197,7 +197,7 @@ public class StorageItemFactory {
                                       readGroupURIs, owner, readableFlag, writableFlag, totalChildCount,
                                       getTarget(containerNode));
         } else if (node instanceof LinkNode) {
-            nextItem = new LinkItem(nodeURI, -1L, lastModifiedDate, publicFlag, lockedFlag, writeGroupURIs,
+            nextItem = new LinkItem(nodeURI, lastModifiedDate, publicFlag, lockedFlag, writeGroupURIs,
                                     readGroupURIs, owner, readableFlag, writableFlag, getTarget(node));
         } else {
             final DataNode dataNode = (DataNode) node;

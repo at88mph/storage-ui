@@ -70,6 +70,7 @@ package org.opencadc.storage;
 
 
 import ca.nrc.cadc.rest.InlineContentHandler;
+import java.util.Objects;
 import javax.servlet.http.HttpServletResponse;
 import org.json.JSONObject;
 import org.opencadc.storage.node.FolderHandler;
@@ -102,7 +103,7 @@ public class PutAction extends StorageAction {
     }
 
     private void handleFolder() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject());
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
         folderHandler.create(getCurrentPath());
         this.syncOutput.setCode(HttpServletResponse.SC_CREATED);
     }
@@ -115,6 +116,15 @@ public class PutAction extends StorageAction {
 
     @Override
     protected InlineContentHandler getInlineContentHandler() {
-        return new JSONInlineContentHandler();
+        try {
+            final StorageItemContext storageItemType = getStorageItemType();
+            if (Objects.requireNonNull(storageItemType) == StorageItemContext.FILE) {
+                return new FileUploadInlineContentHandler(this.currentService, null, getCurrentSubject());
+            } else {
+                return new JSONInlineContentHandler();
+            }
+        } catch (Exception exception) {
+            throw new RuntimeException(exception.getMessage(), exception);
+        }
     }
 }

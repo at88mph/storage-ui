@@ -318,7 +318,8 @@ public class FolderHandler extends StorageHandler {
     public void writePage(final Path path, final URI startNextPageURI, final List<String> vospaceServiceNameList, final String httpUsername,
                           final FreeMarkerConfiguration freeMarkerConfiguration, final Writer writer) throws Exception {
         final Map<String, Object> dataModel = new HashMap<>();
-        final Node node = getNode(path);
+        final ContainerNode containerNode = getNode(path);
+        final FolderItem folderItem = (FolderItem) this.storageItemFactory.translate(containerNode);
 
         dataModel.put("initialRows", iterator(path));
 

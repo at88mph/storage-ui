@@ -71,23 +71,6 @@ package org.opencadc.storage;
 import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.date.DateUtil;
 import ca.nrc.cadc.util.StringUtil;
-import net.canfar.storage.PathUtils;
-import org.opencadc.storage.config.VOSpaceServiceConfig;
-import net.canfar.storage.web.view.FileItem;
-import net.canfar.storage.web.view.FolderItem;
-import net.canfar.storage.web.view.LinkItem;
-import net.canfar.storage.web.view.StorageItem;
-import org.apache.log4j.Logger;
-import org.opencadc.gms.GroupURI;
-import org.opencadc.vospace.ContainerNode;
-import org.opencadc.vospace.DataNode;
-import org.opencadc.vospace.LinkNode;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.VOSURI;
-import org.opencadc.vospace.server.Utils;
-
-import javax.security.auth.Subject;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
@@ -99,14 +82,26 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import javax.security.auth.Subject;
+import net.canfar.storage.PathUtils;
+import net.canfar.storage.web.view.FileItem;
+import net.canfar.storage.web.view.FolderItem;
+import net.canfar.storage.web.view.LinkItem;
+import net.canfar.storage.web.view.StorageItem;
+import org.apache.log4j.Logger;
+import org.opencadc.gms.GroupURI;
+import org.opencadc.storage.config.VOSpaceServiceConfig;
+import org.opencadc.vospace.ContainerNode;
+import org.opencadc.vospace.DataNode;
+import org.opencadc.vospace.LinkNode;
+import org.opencadc.vospace.Node;
+import org.opencadc.vospace.VOS;
+import org.opencadc.vospace.VOSURI;
+import org.opencadc.vospace.server.Utils;
 
 
 public class StorageItemFactory {
     private static final Logger LOGGER = Logger.getLogger(StorageItemFactory.class);
-
-    private final String contextPath;
-    private final VOSpaceServiceConfig serviceConfig;
-
     private static final Map<String, String> NODE_TYPE_ENDPOINT_MAPPING = new HashMap<>();
 
     static {
@@ -115,16 +110,13 @@ public class StorageItemFactory {
         StorageItemFactory.NODE_TYPE_ENDPOINT_MAPPING.put(ContainerNode.class.getName(), "list");
     }
 
+    private final String contextPath;
+    private final VOSpaceServiceConfig serviceConfig;
+
 
     public StorageItemFactory(final String contextPath, final VOSpaceServiceConfig serviceConfig) {
         this.contextPath = contextPath;
         this.serviceConfig = serviceConfig;
-    }
-
-    private Path getTarget(final Node node) {
-        final String endpoint = StorageItemFactory.NODE_TYPE_ENDPOINT_MAPPING.get(node.getClass().getName());
-        final String path = PathUtils.toPath(node).toString();
-        return Paths.get(contextPath, serviceConfig.getName(), endpoint, path);
     }
 
     /**
@@ -133,7 +125,7 @@ public class StorageItemFactory {
      * @param node The Node whose date to parse.
      * @return The Date parsed, or null if it cannot be parsed.
      */
-    private Date parseDate(final Node node) {
+    private static Date parseDate(final Node node) {
         final String dateProperty = node.getPropertyValue(VOS.PROPERTY_URI_DATE);
 
         if (dateProperty == null) {
@@ -148,16 +140,21 @@ public class StorageItemFactory {
         }
     }
 
+    private Path getTarget(final Node node) {
+        final String endpoint = StorageItemFactory.NODE_TYPE_ENDPOINT_MAPPING.get(node.getClass().getName());
+        final String path = PathUtils.toPath(node).toString();
+        return Paths.get(contextPath, serviceConfig.getName(), endpoint, path);
+    }
 
     /**
      * Translate the given node into a view object (StorageItem) instance.
      *
      * @param node The VOSpace Node instance.
      * @return StorageItem instance, never null.
-     *
      * @throws URISyntaxException If the URI of the node cannot be translated.
      */
     public StorageItem translate(final Node node) throws URISyntaxException {
+        LOGGER.debug("translate(Node): " + node.getName());
         final StorageItem nextItem;
         final boolean isRoot = Utils.isRoot(Utils.getPath(node));
         final Date lastModifiedDate = isRoot ? null : parseDate(node);
@@ -192,32 +189,27 @@ public class StorageItemFactory {
         final VOSURI nodeURI = serviceConfig.toURI(node);
 
         if (node instanceof ContainerNode) {
-            final String totalChildCountValue =
-                    node.getPropertyValue(URI.create("ivo://ivoa.net/vospace/core#childCount"));
+            final String totalChildCountValue = node.getPropertyValue(URI.create("ivo://ivoa.net/vospace/core#childCount"));
             final int totalChildCount = StringUtil.hasLength(totalChildCountValue)
                                         ? Integer.parseInt(totalChildCountValue)
                                         : -1;
             final ContainerNode containerNode = (ContainerNode) node;
 
             final long sizeInBytes = containerNode.bytesUsed == null ? -1L : containerNode.bytesUsed;
-            nextItem = new FolderItem(nodeURI, sizeInBytes, lastModifiedDate, publicFlag, lockedFlag, writeGroupURIs,
-                                      readGroupURIs, owner, readableFlag, writableFlag, totalChildCount,
-                                      getTarget(containerNode));
+            nextItem = new FolderItem(nodeURI, sizeInBytes, lastModifiedDate, publicFlag, lockedFlag, writeGroupURIs, readGroupURIs, owner, readableFlag,
+                                      writableFlag, totalChildCount, getTarget(containerNode));
         } else if (node instanceof LinkNode) {
-            nextItem = new LinkItem(nodeURI, -1L, lastModifiedDate, publicFlag, lockedFlag, writeGroupURIs,
-                                    readGroupURIs, owner, readableFlag, writableFlag, getTarget(node));
+            nextItem = new LinkItem(nodeURI, lastModifiedDate, publicFlag, lockedFlag, writeGroupURIs, readGroupURIs, owner, readableFlag, writableFlag,
+                                    getTarget(node));
+
         } else {
             final DataNode dataNode = (DataNode) node;
             final long sizeInBytes = dataNode.bytesUsed == null ? -1L : dataNode.bytesUsed;
 
-            nextItem = new FileItem(nodeURI, sizeInBytes, lastModifiedDate, publicFlag, lockedFlag, writeGroupURIs,
-                                    readGroupURIs, owner, readableFlag, writableFlag, getTarget(node));
+            nextItem = new FileItem(nodeURI, sizeInBytes, lastModifiedDate, publicFlag, lockedFlag, writeGroupURIs, readGroupURIs, owner, readableFlag,
+                                    writableFlag, getTarget(node));
         }
 
         return nextItem;
-    }
-
-    public FolderItem getFolderItemView(final ContainerNode containerNode) throws URISyntaxException {
-        return (FolderItem) translate(containerNode);
     }
 }

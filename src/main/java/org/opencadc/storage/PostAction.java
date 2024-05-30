@@ -69,11 +69,8 @@
 package org.opencadc.storage;
 
 import ca.nrc.cadc.rest.InlineContentHandler;
-import java.nio.file.Path;
-import java.util.Objects;
 import javax.servlet.http.HttpServletResponse;
 import org.json.JSONObject;
-import org.opencadc.storage.node.FileHandler;
 
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.storage.node.StorageHandler;
@@ -89,9 +86,6 @@ public class PostAction extends StorageAction {
             case FOLDER:
                 handleFolder();
                 break;
-            case FILE:
-                handleFile();
-                break;
             case ITEM:
                 handleItem();
                 break;
@@ -102,22 +96,12 @@ public class PostAction extends StorageAction {
     }
 
     private void handleFolder() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject());
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
         final ContainerNode containerNode = new ContainerNode(getCurrentName());
         PathUtils.augmentParents(getCurrentPath(), containerNode);
 
         final JSONObject payload = (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY);
         folderHandler.move(payload, containerNode);
-    }
-
-    private void handleFile() throws Exception {
-        final boolean isInheritPermissions = this.syncInput.getContent("inheritPermissionsCheckBox") != null;
-        if (isInheritPermissions) {
-            final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
-            for (final String fileName : this.syncInput.getContentNames()) {
-                fileHandler.setInheritedPermissions((Path) this.syncInput.getContent(fileName));
-            }
-        }
     }
 
     private void handleItem() throws Exception {
@@ -129,15 +113,6 @@ public class PostAction extends StorageAction {
 
     @Override
     protected InlineContentHandler getInlineContentHandler() {
-        try {
-            final StorageItemContext storageItemType = getStorageItemType();
-            if (Objects.requireNonNull(storageItemType) == StorageItemContext.FILE) {
-                return new FileUploadInlineContentHandler(this.currentService, null, getCurrentSubject());
-            } else {
-                return new JSONInlineContentHandler();
-            }
-        } catch (Exception exception) {
-            throw new RuntimeException(exception.getMessage(), exception);
-        }
+        return new JSONInlineContentHandler();
     }
 }

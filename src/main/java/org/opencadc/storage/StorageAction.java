@@ -83,6 +83,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import javax.security.auth.Subject;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.log4j.Logger;
@@ -128,7 +129,6 @@ public abstract class StorageAction extends RestAction {
     protected InlineContentHandler getInlineContentHandler() {
         return null;
     }
-
 
     Path getCurrentPath() {
         final Path servicePath = getServicePath();
