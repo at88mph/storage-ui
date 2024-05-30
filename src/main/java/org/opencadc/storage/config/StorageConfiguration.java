@@ -92,6 +92,7 @@ import org.opencadc.token.Client;
 
 public class StorageConfiguration {
     public static final String FIRST_PARTY_COOKIE_NAME = "__Host-storage-ui-auth";
+    public static final String COOKIE_FORMAT = StorageConfiguration.FIRST_PARTY_COOKIE_NAME + "=%s; Path=/; Secure; HttpOnly";
     private static final Logger LOGGER = LogManager.getLogger(StorageConfiguration.class);
     private static final String DEFAULT_CONFIG_FILE_PATH =
         System.getProperty("user.home") + "/config/org.opencadc.vosui.properties";

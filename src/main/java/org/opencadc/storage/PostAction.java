@@ -69,9 +69,11 @@
 package org.opencadc.storage;
 
 import ca.nrc.cadc.rest.InlineContentHandler;
+import java.nio.file.Path;
 import javax.servlet.http.HttpServletResponse;
 import org.json.JSONObject;
 
+import org.opencadc.storage.node.FileHandler;
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.storage.node.StorageHandler;
 import org.opencadc.vospace.ContainerNode;
@@ -89,8 +91,21 @@ public class PostAction extends StorageAction {
             case ITEM:
                 handleItem();
                 break;
+            case FILE:
+                handleFile();
+                break;
             default: {
                 throw new UnsupportedOperationException("No POST supported for " + storageItemType);
+            }
+        }
+    }
+
+    private void handleFile() throws Exception {
+        final boolean isInheritPermissions = this.syncInput.getContent("inheritPermissionsCheckBox") != null;
+        if (isInheritPermissions) {
+            final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
+            for (final String fileName : this.syncInput.getContentNames()) {
+                fileHandler.setInheritedPermissions((Path) this.syncInput.getContent(fileName));
             }
         }
     }

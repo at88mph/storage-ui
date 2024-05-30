@@ -196,6 +196,29 @@ public class FolderHandler extends StorageHandler {
         }
     }
 
+    private void move(final VOSURI source, final VOSURI destination) throws Exception {
+        // According to ivoa.net VOSpace 2.1 spec, a move is handled using
+        // a transfer. keepBytes = false. destination URI is the Direction.
+        final Transfer transfer = getTransfer(source, destination);
+
+        try {
+            Subject.doAs(this.subject,
+                         (PrivilegedExceptionAction<Void>) () -> {
+                             final ClientTransfer clientTransfer = getVOSpaceClient().createTransfer(transfer);
+                             clientTransfer.setMonitor(true);
+                             clientTransfer.runTransfer();
+
+                             LOGGER.debug("transfer run complete");
+                             VOSClientUtil.checkTransferFailure(clientTransfer);
+                             LOGGER.debug("no errors in transfer");
+                             return null;
+                         });
+        } catch (PrivilegedActionException e) {
+            LOGGER.debug("error in transfer.", e);
+            throw e.getException();
+        }
+    }
+
     /**
      * Iterate over the child items.
      *
@@ -221,8 +244,8 @@ public class FolderHandler extends StorageHandler {
             }
         } else {
             childNodeIterator = containerNode.childIterator == null
-                                ? containerNode.getNodes().iterator()
-                                : containerNode.childIterator;
+                ? containerNode.getNodes().iterator()
+                : containerNode.childIterator;
             startNextPageURI = null;
         }
 
@@ -253,29 +276,6 @@ public class FolderHandler extends StorageHandler {
                 return writer.toString();
             }
         };
-    }
-
-    private void move(final VOSURI source, final VOSURI destination) throws Exception {
-        // According to ivoa.net VOSpace 2.1 spec, a move is handled using
-        // a transfer. keepBytes = false. destination URI is the Direction.
-        final Transfer transfer = getTransfer(source, destination);
-
-        try {
-            Subject.doAs(this.subject,
-                         (PrivilegedExceptionAction<Void>) () -> {
-                             final ClientTransfer clientTransfer = getVOSpaceClient().createTransfer(transfer);
-                             clientTransfer.setMonitor(true);
-                             clientTransfer.runTransfer();
-
-                             LOGGER.debug("transfer run complete");
-                             VOSClientUtil.checkTransferFailure(clientTransfer);
-                             LOGGER.debug("no errors in transfer");
-                             return null;
-                         });
-        } catch (PrivilegedActionException e) {
-            LOGGER.debug("error in transfer.", e);
-            throw e.getException();
-        }
     }
 
     Transfer getTransfer(VOSURI source, VOSURI destination) {

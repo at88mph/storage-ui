@@ -69,44 +69,51 @@
 package org.opencadc.storage;
 
 
-import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.util.StringUtil;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import net.canfar.storage.web.view.FolderItem;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
+import javax.servlet.http.HttpServletResponse;
+import org.opencadc.storage.config.StorageConfiguration;
 import org.opencadc.storage.node.FileHandler;
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.storage.node.LinkHandler;
-import org.opencadc.storage.view.FreeMarkerConfiguration;
-import org.opencadc.vospace.NodeNotFoundException;
-import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.VOSURI;
+import org.opencadc.token.Client;
 
 
 public class GetAction extends StorageAction {
     @Override
     public void doAction() throws Exception {
         final StorageItemContext storageItemType = getStorageItemType();
-
-        switch (storageItemType) {
-            case FOLDER:
-                handleFolder();
-                break;
-            case LINK:
-                handleLink();
-                break;
-            case FILE:
-                handleFile();
-                break;
-            case LIST:
-                handleList();
-                break;
-            case PAGE:
+        if (this.currentService == null) {
+            if (storageItemType == StorageItemContext.OIDC_CALLBACK) {
+                handleOIDCCallback();
+            } else if (storageItemType == StorageItemContext.OIDC_LOGIN) {
+                handleOIDCLogin();
+            } else {
+                redirectDefaultService();
+            }
+        } else {
+            switch (storageItemType) {
+                case FOLDER:
+                    handleFolder();
+                    break;
+                case LINK:
+                    handleLink();
+                    break;
+                case FILE:
+                    handleFile();
+                    break;
+                case LIST:
+                    handleList();
+                    break;
+                case PAGE:
+                default: {
+                    throw new UnsupportedOperationException("No GET support for " + storageItemType + " with service " + this.currentService.getName());
+                }
+            }
         }
     }
 
@@ -131,5 +138,32 @@ public class GetAction extends StorageAction {
         final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
         folderHandler.writePage(getCurrentPath(), null, getVOSpaceServiceList(), getDisplayName(),
                                 this.storageConfiguration.getFreeMarkerConfiguration(this.syncInput.getContextPath()), writer);
+    }
+
+    void handleOIDCCallback() throws Exception {
+        final Client oidcClient = getOIDCClient();
+        final byte[] encryptedKey = oidcClient.setAccessToken(getRequestURI());
+        setCookie(encryptedKey);
+        redirectTo(HttpServletResponse.SC_FOUND, getOIDCClient().getCallbackURL().toExternalForm());
+    }
+
+    void handleOIDCLogin() throws Exception {
+        redirectTo(HttpServletResponse.SC_FOUND, getOIDCClient().getAuthorizationURL().toExternalForm());
+    }
+
+    void setCookie(final byte[] encryptedAssetsKey) {
+        syncOutput.setHeader("set-cookie", String.format(StorageConfiguration.COOKIE_FORMAT,
+                                                         new String(encryptedAssetsKey,
+                                                                    StandardCharsets.ISO_8859_1)));
+    }
+
+    URI getRequestURI() {
+        final String requestSchemeHostPath = this.syncInput.getRequestURI();
+        final String requestQueryString =
+            this.syncInput.getParameterNames().stream()
+                          .map(parameterName -> String.format("%s=%s", parameterName,
+                                                              this.syncInput.getParameter(parameterName)))
+                          .collect(Collectors.joining("&"));
+        return URI.create(requestSchemeHostPath + (StringUtil.hasText(requestQueryString) ? "?" + requestQueryString : ""));
     }
 }

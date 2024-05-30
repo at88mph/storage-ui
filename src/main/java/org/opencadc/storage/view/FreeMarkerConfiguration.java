@@ -98,8 +98,10 @@ public class FreeMarkerConfiguration extends Configuration {
 
         if (currentTemplateLoader == null) {
             return new MultiTemplateLoader(new TemplateLoader[0]);
-        } else {
+        } else if (currentTemplateLoader instanceof MultiTemplateLoader) {
             return (MultiTemplateLoader) currentTemplateLoader;
+        } else {
+            return new MultiTemplateLoader(new TemplateLoader[] {currentTemplateLoader});
         }
     }
 }

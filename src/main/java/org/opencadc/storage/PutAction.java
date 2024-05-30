@@ -70,8 +70,8 @@ package org.opencadc.storage;
 
 
 import ca.nrc.cadc.rest.InlineContentHandler;
-import java.util.Objects;
 import javax.servlet.http.HttpServletResponse;
+import net.canfar.storage.web.UploadVerifier;
 import org.json.JSONObject;
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.storage.node.LinkHandler;
@@ -117,12 +117,7 @@ public class PutAction extends StorageAction {
     @Override
     protected InlineContentHandler getInlineContentHandler() {
         try {
-            final StorageItemContext storageItemType = getStorageItemType();
-            if (Objects.requireNonNull(storageItemType) == StorageItemContext.FILE) {
-                return new FileUploadInlineContentHandler(this.currentService, null, getCurrentSubject());
-            } else {
-                return new JSONInlineContentHandler();
-            }
+            return new PutInlineContentHandler(this.currentService, getCurrentSubject(), new UploadVerifier());
         } catch (Exception exception) {
             throw new RuntimeException(exception.getMessage(), exception);
         }
