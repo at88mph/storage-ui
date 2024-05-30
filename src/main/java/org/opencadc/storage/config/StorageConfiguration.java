@@ -69,9 +69,12 @@
 package org.opencadc.storage.config;
 
 import ca.nrc.cadc.util.StringUtil;
+import freemarker.cache.ClassTemplateLoader;
 import freemarker.cache.URLTemplateLoader;
 import freemarker.template.TemplateModelException;
+import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.commons.configuration2.CombinedConfiguration;
@@ -87,15 +90,11 @@ import org.apache.log4j.Logger;
 import org.opencadc.storage.view.FreeMarkerConfiguration;
 import org.opencadc.token.Client;
 
-import java.io.IOException;
-import java.net.URL;
-
 public class StorageConfiguration {
-    private static final Logger LOGGER = LogManager.getLogger(StorageConfiguration.class);
     public static final String FIRST_PARTY_COOKIE_NAME = "__Host-storage-ui-auth";
-
+    private static final Logger LOGGER = LogManager.getLogger(StorageConfiguration.class);
     private static final String DEFAULT_CONFIG_FILE_PATH =
-            System.getProperty("user.home") + "/config/org.opencadc.vosui.properties";
+        System.getProperty("user.home") + "/config/org.opencadc.vosui.properties";
     private final Configuration configuration;
 
     public StorageConfiguration() {
@@ -107,8 +106,8 @@ public class StorageConfiguration {
 
         final Parameters parameters = new Parameters();
         final FileBasedConfigurationBuilder<PropertiesConfiguration> builder =
-                new FileBasedConfigurationBuilder<>(PropertiesConfiguration.class)
-                        .configure(parameters.properties().setFileName(filePath));
+            new FileBasedConfigurationBuilder<>(PropertiesConfiguration.class)
+                .configure(parameters.properties().setFileName(filePath));
 
         try {
             combinedConfiguration.addConfiguration(builder.getConfiguration());
@@ -168,19 +167,11 @@ public class StorageConfiguration {
                           getOIDCScope().split(" "), getTokenCacheURLString());
     }
 
-    String lookup(final StorageConfigurationKey key) {
-        return lookup(key.propertyName, key.required);
-    }
-
-    String lookup(final StorageConfigurationKey key, final String defaultValue) {
-        return lookup(key.propertyName, defaultValue);
-    }
-
     public String lookup(final String propertyName, final boolean required) {
         final String propertyValue = configuration.getString(propertyName);
         if (propertyValue == null && required) {
             throw new IllegalStateException(
-                    "Required value " + propertyName + " not found in application config.");
+                "Required value " + propertyName + " not found in application config.");
         }
 
         return propertyValue;
@@ -189,19 +180,10 @@ public class StorageConfiguration {
     public boolean lookupFlag(final String propertyName, final boolean required) {
         if (required && !configuration.containsKey(propertyName)) {
             throw new IllegalStateException(
-                    "Required value " + propertyName + " not found in application config.");
+                "Required value " + propertyName + " not found in application config.");
         }
 
         return configuration.getBoolean(propertyName, false);
-    }
-
-    String lookup(final String propertyName, final String defaultValue) {
-        final String propertyValue = configuration.getString(propertyName);
-        return propertyValue == null ? defaultValue : propertyValue;
-    }
-
-    String[] lookupStringArray(final StorageConfigurationKey key) {
-        return lookupStringArray(key.propertyName, key.required);
     }
 
     public String[] lookupStringArray(final String key, final boolean required) {
@@ -209,7 +191,7 @@ public class StorageConfiguration {
 
         if (propertyValues == null && required) {
             throw new IllegalStateException(
-                    "Required value " + key + " not found in application config.");
+                "Required value " + key + " not found in application config.");
         }
 
         return propertyValues;
@@ -217,6 +199,8 @@ public class StorageConfiguration {
 
     public FreeMarkerConfiguration getFreeMarkerConfiguration(final String servletPath) {
         final FreeMarkerConfiguration freeMarkerConfiguration = new FreeMarkerConfiguration();
+        freeMarkerConfiguration.addTemplateLoader(new ClassTemplateLoader(StorageConfiguration.class.getClassLoader(),
+                                                                          String.format("/themes/%s", getThemeName())));
         try {
             freeMarkerConfiguration.setSharedVariable("contextPath", servletPath + (servletPath.endsWith("/") ? "" : "/"));
         } catch (TemplateModelException templateModelException) {
@@ -241,6 +225,23 @@ public class StorageConfiguration {
         }
 
         return freeMarkerConfiguration;
+    }
+
+    String lookup(final StorageConfigurationKey key) {
+        return lookup(key.propertyName, key.required);
+    }
+
+    String lookup(final StorageConfigurationKey key, final String defaultValue) {
+        return lookup(key.propertyName, defaultValue);
+    }
+
+    String lookup(final String propertyName, final String defaultValue) {
+        final String propertyValue = configuration.getString(propertyName);
+        return propertyValue == null ? defaultValue : propertyValue;
+    }
+
+    String[] lookupStringArray(final StorageConfigurationKey key) {
+        return lookupStringArray(key.propertyName, key.required);
     }
 
     enum StorageConfigurationKey {

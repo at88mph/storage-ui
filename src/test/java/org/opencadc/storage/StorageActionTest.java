@@ -77,16 +77,16 @@ import java.util.List;
 
 public class StorageActionTest {
     @Test
-    public void getCurrentService() throws Exception {
+    public void getCurrentService() {
         final StorageAction storageAction = new StorageAction(null, null) {
             @Override
-            public void doAction() throws Exception {
+            public void doAction() {
                 // do nothing.
             }
 
             @Override
-            Path getRequestPath() {
-                return Path.of("/myvo1/home/dune/first");
+            Path getServicePath() {
+                return Path.of("myvo1/home/dune/first");
             }
 
             @Override

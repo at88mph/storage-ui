@@ -69,6 +69,7 @@
 package org.opencadc.storage;
 
 
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.util.StringUtil;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
@@ -81,13 +82,10 @@ import net.canfar.storage.web.view.FolderItem;
 import org.opencadc.storage.node.FileHandler;
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.storage.node.LinkHandler;
-import org.opencadc.vospace.ContainerNode;
+import org.opencadc.storage.view.FreeMarkerConfiguration;
+import org.opencadc.vospace.NodeNotFoundException;
 import org.opencadc.vospace.VOS;
 import org.opencadc.vospace.VOSURI;
-import org.restlet.data.MediaType;
-import org.restlet.ext.freemarker.TemplateRepresentation;
-import org.restlet.representation.Representation;
-import org.restlet.resource.ResourceException;
 
 
 public class GetAction extends StorageAction {
@@ -133,59 +131,9 @@ public class GetAction extends StorageAction {
         final String pathString = getCurrentPath().toString();
         final VOS.Detail detail = (!StringUtil.hasText(pathString) || pathString.trim().equals("/"))
                                   ? VOS.Detail.raw : VOS.Detail.max;
-        final Iterator<String> initialRows = folderHandler.iterator(getCurrentPath(), getStorageItemFactory());
-    }
-
-    Representation representFolderItem(final FolderItem folderItem, final Iterator<String> initialRows,
-                                       final VOSURI startNextPageURI) throws Exception {
-        final Map<String, Object> dataModel = new HashMap<>();
-        dataModel.put("initialRows", initialRows);
-
-        // Explicitly set whether folder is writable or not, handling null situation as equal to false
-        dataModel.put("folderWritable", folderItem.isWritable());
-        dataModel.put("folder", folderItem);
-
-        if (startNextPageURI != null) {
-            dataModel.put("startURI", startNextPageURI.toString());
-        }
-
-        // Add the current VOSpace service name so that navigation links can be rendered correctly
-        String vospaceSvcName = this.currentService.getName();
-        String nodePrefixURI = this.currentService.getNodeResourceID().toString();
-        dataModel.put("vospaceSvcPath", vospaceSvcName + "/");
-        dataModel.put("vospaceSvcName", vospaceSvcName);
-        dataModel.put("vospaceNodePrefixURI", nodePrefixURI);
-
-        // Used to populate VOSpace service dropdown
-        dataModel.put("vospaceServices", getVOSpaceServiceList());
-
-        final String httpUsername = getDisplayName();
-
-        if (httpUsername != null) {
-            dataModel.put("username", httpUsername);
-
-            try {
-                // Check to see if home directory exists
-                final String userHomeBase = this.currentService.homeDir;
-                if (StringUtil.hasLength(userHomeBase)) {
-                    final Path userHomePath = Paths.get(userHomeBase, httpUsername);
-//                    getNode(userHomePath, null, 0);
-                    dataModel.put("homeDir", userHomePath.toString());
-                }
-            } catch (ResourceException re) {
-                // Ignore this as there is no 'home' VOSpace defined in org.opencadc.vosui.properties
-            }
-        }
-
-        final Map<String, Boolean> featureMap = new HashMap<>();
-        featureMap.put("batchDownload", currentService.supportsBatchDownloads());
-        featureMap.put("batchUpload", currentService.supportsBatchUploads());
-        featureMap.put("externalLinks", currentService.supportsExternalLinks());
-        featureMap.put("paging", currentService.supportsPaging());
-
-        dataModel.put("features", featureMap);
-
-        return new TemplateRepresentation(String.format("themes/%s/index.ftl", storageConfiguration.getThemeName()),
-                                          storageConfiguration.getFreeMarkerConfiguration(this.syncInput.getContextPath()), dataModel, MediaType.TEXT_HTML);
+        final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
+//        final FreeMarkerConfiguration freeMarkerConfiguration = this.storageConfiguration.getFreeMarkerConfiguration(this.syncInput.getContextPath());
+        folderHandler.writePage(getCurrentPath(), null, getVOSpaceServiceList(), getDisplayName(),
+                                this.storageConfiguration.getFreeMarkerConfiguration(this.syncInput.getContextPath()), writer);
     }
 }

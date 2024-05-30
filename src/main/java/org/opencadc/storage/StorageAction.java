@@ -131,8 +131,12 @@ public abstract class StorageAction extends RestAction {
 
 
     Path getCurrentPath() {
-        final Path requestPath = getRequestPath();
-        return requestPath.subpath(2, requestPath.getNameCount());
+        final Path servicePath = getServicePath();
+        return servicePath.subpath(2, servicePath.getNameCount());
+    }
+
+    Path getServicePath() {
+        return Path.of(this.syncInput.getPath());
     }
 
     Path getRequestPath() {
@@ -144,14 +148,14 @@ public abstract class StorageAction extends RestAction {
     }
 
     StorageItemContext getStorageItemType() {
-        return StorageItemContext.valueOf(getRequestPath().getName(1).toString().toUpperCase());
+        return StorageItemContext.valueOf(getServicePath().getName(1).toString().toUpperCase());
     }
 
     String getCurrentVOSpaceService() {
         final String ret;
 
-        final Path requestPath = getRequestPath();
-        final String voSpaceService = requestPath.getName(0).toString();
+        final Path servicePath = getServicePath();
+        final String voSpaceService = servicePath.getName(0).toString();
         if (StringUtil.hasText(voSpaceService)) {
             if (getVOSpaceServiceList().contains(voSpaceService.toLowerCase())) {
                 ret = voSpaceService;

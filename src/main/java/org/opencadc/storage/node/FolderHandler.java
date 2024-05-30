@@ -68,6 +68,7 @@
 
 package org.opencadc.storage.node;
 
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.util.StringUtil;
 import java.io.StringWriter;
 import java.io.Writer;
@@ -96,26 +97,27 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONWriter;
 import org.opencadc.storage.StorageItemFactory;
+import org.opencadc.storage.config.StorageConfiguration;
 import org.opencadc.storage.config.VOSpaceServiceConfig;
+import org.opencadc.storage.view.FreeMarkerConfiguration;
 import org.opencadc.vospace.ContainerNode;
 import org.opencadc.vospace.Node;
+import org.opencadc.vospace.NodeNotFoundException;
 import org.opencadc.vospace.NodeProperty;
 import org.opencadc.vospace.VOS;
 import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.client.ClientTransfer;
 import org.opencadc.vospace.client.VOSClientUtil;
 import org.opencadc.vospace.transfer.Transfer;
-import org.restlet.data.MediaType;
-import org.restlet.ext.freemarker.TemplateRepresentation;
-import org.restlet.representation.Representation;
-import org.restlet.resource.ResourceException;
 
 
 public class FolderHandler extends StorageHandler {
     private static final Logger LOGGER = Logger.getLogger(FolderHandler.class);
+    private final StorageItemFactory storageItemFactory;
 
-    public FolderHandler(VOSpaceServiceConfig currentService, Subject subject) {
+    public FolderHandler(VOSpaceServiceConfig currentService, Subject subject, StorageItemFactory storageItemFactory) {
         super(currentService, subject);
+        this.storageItemFactory = storageItemFactory;
     }
 
     /**
@@ -195,13 +197,12 @@ public class FolderHandler extends StorageHandler {
     }
 
     /**
-     * Iterate over the
+     * Iterate over the child items.
      *
      * @param path
-     * @param storageItemFactory
      * @throws Exception
      */
-    public Iterator<String> iterator(final Path path, final StorageItemFactory storageItemFactory) throws Exception {
+    public Iterator<String> iterator(final Path path) throws Exception {
         final ContainerNode containerNode = getNode(path);
         final Path parentPath = PathUtils.toPath(containerNode);
         final VOSURI startNextPageURI;
@@ -312,5 +313,58 @@ public class FolderHandler extends StorageHandler {
     private long getQuotaPropertyValue(final Node node) {
         final NodeProperty property = node.getProperty(VOS.PROPERTY_URI_QUOTA);
         return (property == null) ? 0L : Long.parseLong(property.getValue());
+    }
+
+    public void writePage(final Path path, final URI startNextPageURI, final List<String> vospaceServiceNameList, final String httpUsername,
+                          final FreeMarkerConfiguration freeMarkerConfiguration, final Writer writer) throws Exception {
+        final Map<String, Object> dataModel = new HashMap<>();
+        final Node node = getNode(path);
+
+        dataModel.put("initialRows", iterator(path));
+
+        // Explicitly set whether folder is writable or not, handling null situation as equal to false
+        dataModel.put("folderWritable", folderItem.isWritable());
+        dataModel.put("folder", folderItem);
+
+        if (startNextPageURI != null) {
+            dataModel.put("startURI", startNextPageURI.toString());
+        }
+
+        // Add the current VOSpace service name so that navigation links can be rendered correctly
+        String vospaceSvcName = this.currentService.getName();
+        String nodePrefixURI = this.currentService.getNodeResourceID().toString();
+        dataModel.put("vospaceSvcPath", vospaceSvcName + "/");
+        dataModel.put("vospaceSvcName", vospaceSvcName);
+        dataModel.put("vospaceNodePrefixURI", nodePrefixURI);
+
+        // Used to populate VOSpace service dropdown
+        dataModel.put("vospaceServices", vospaceServiceNameList);
+
+        final Map<String, Boolean> featureMap = new HashMap<>();
+        featureMap.put("batchDownload", currentService.supportsBatchDownloads());
+        featureMap.put("batchUpload", currentService.supportsBatchUploads());
+        featureMap.put("externalLinks", currentService.supportsExternalLinks());
+        featureMap.put("paging", currentService.supportsPaging());
+
+        dataModel.put("features", featureMap);
+
+        if (httpUsername != null) {
+            dataModel.put("username", httpUsername);
+
+            try {
+                // Check to see if home directory exists
+                final String userHomeBase = this.currentService.homeDir;
+                if (StringUtil.hasLength(userHomeBase)) {
+                    final Path userHomePath = Paths.get(userHomeBase, httpUsername);
+                    getNode(userHomePath, null, 0);
+                    dataModel.put("homeDir", userHomePath.toString());
+                }
+            } catch (ResourceNotFoundException | NodeNotFoundException re) {
+                // Ignore this as there is no 'home' VOSpace defined in org.opencadc.vosui.properties, or the username has no equivalent
+            }
+        }
+
+        freeMarkerConfiguration.getTemplate("index.ftl").process(dataModel, writer);
+        writer.flush();
     }
 }
