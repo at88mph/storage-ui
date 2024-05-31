@@ -3,7 +3,7 @@
  *******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
  **************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
  *
- *  (c) 2024.                            (c) 2024.
+ *  (c) 2016.                            (c) 2016.
  *  Government of Canada                 Gouvernement du Canada
  *  National Research Council            Conseil national de recherches
  *  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -68,51 +68,21 @@
 
 package org.opencadc.storage;
 
-import ca.nrc.cadc.rest.InlineContentHandler;
-import javax.servlet.http.HttpServletResponse;
-import org.json.JSONObject;
+import ca.nrc.cadc.net.OutputStreamWrapper;
 
-import org.opencadc.storage.node.FolderHandler;
-import org.opencadc.storage.node.StorageHandler;
-import org.opencadc.vospace.ContainerNode;
+public interface UploadOutputStreamWrapper extends OutputStreamWrapper
+{
+    /**
+     * Obtain the MD5 that was calculated during the upload.
+     *
+     * @return      byte[] calculatedMD5, or null if not yet run.
+     */
+    byte[] getCalculatedMD5();
 
-
-public class PostAction extends StorageAction {
-    @Override
-    public void doAction() throws Exception {
-        final StorageItemContext storageItemType = getStorageItemType();
-
-        switch (storageItemType) {
-            case FOLDER:
-                handleFolder();
-                break;
-            case ITEM:
-                handleItem();
-                break;
-            default: {
-                throw new UnsupportedOperationException("No POST supported for " + storageItemType);
-            }
-        }
-    }
-
-    private void handleFolder() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
-        final ContainerNode containerNode = new ContainerNode(getCurrentName());
-        PathUtils.augmentParents(getCurrentPath(), containerNode);
-
-        final JSONObject payload = (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY);
-        folderHandler.move(payload, containerNode);
-    }
-
-    private void handleItem() throws Exception {
-        final StorageHandler storageHandler = new StorageHandler(this.currentService, getCurrentSubject());
-        final boolean isRecursiveSet = storageHandler.updatePermissions(getCurrentPath(),
-                                                                        (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY));
-        this.syncOutput.setCode(isRecursiveSet ? HttpServletResponse.SC_ACCEPTED : HttpServletResponse.SC_OK);
-    }
-
-    @Override
-    protected InlineContentHandler getInlineContentHandler() {
-        return new JSONInlineContentHandler();
-    }
+    /**
+     * Obtain a count of the bytes that was obtained during the upload.
+     *
+     * @return      long byte count.
+     */
+    long getByteCount();
 }

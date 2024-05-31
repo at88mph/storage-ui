@@ -3,7 +3,7 @@
  *******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
  **************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
  *
- *  (c) 2024.                            (c) 2024.
+ *  (c) 2016.                            (c) 2016.
  *  Government of Canada                 Gouvernement du Canada
  *  National Research Council            Conseil national de recherches
  *  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -68,51 +68,130 @@
 
 package org.opencadc.storage;
 
-import ca.nrc.cadc.rest.InlineContentHandler;
-import javax.servlet.http.HttpServletResponse;
-import org.json.JSONObject;
+import ca.nrc.cadc.io.ByteCountOutputStream;
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import org.restlet.data.Status;
+import org.restlet.resource.ResourceException;
 
-import org.opencadc.storage.node.FolderHandler;
-import org.opencadc.storage.node.StorageHandler;
-import org.opencadc.vospace.ContainerNode;
+
+public class UploadOutputStreamWrapperImpl implements UploadOutputStreamWrapper
+{
+    private static final int DEFAULT_BUFFER_SIZE = 8192;
 
 
-public class PostAction extends StorageAction {
-    @Override
-    public void doAction() throws Exception {
-        final StorageItemContext storageItemType = getStorageItemType();
+    private InputStream sourceInputStream;
+    private long byteCount;
+    private byte[] calculatedMD5;
+    private int bufferSize;
 
-        switch (storageItemType) {
-            case FOLDER:
-                handleFolder();
-                break;
-            case ITEM:
-                handleItem();
-                break;
-            default: {
-                throw new UnsupportedOperationException("No POST supported for " + storageItemType);
-            }
+
+    /**
+     * Constructor to use the default buffer size.
+     *
+     * @param sourceInputStream The source stream.
+     */
+    public UploadOutputStreamWrapperImpl(final InputStream sourceInputStream)
+    {
+        this(sourceInputStream, DEFAULT_BUFFER_SIZE);
+    }
+
+    /**
+     * Full Constructor.  Provide the source stream to read from, and the
+     * desired buffer size.
+     *
+     * @param sourceInputStream The source stream.
+     * @param bufferSize        The desired buffer size while reading.
+     */
+    public UploadOutputStreamWrapperImpl(final InputStream sourceInputStream,
+                                         final int bufferSize)
+    {
+        this.sourceInputStream = sourceInputStream;
+        this.bufferSize = bufferSize;
+    }
+
+
+    /**
+     * Perform the write operation to the given output.
+     *
+     * @param out The output to write to.
+     * @throws IOException For any unhandled error.
+     */
+    public void write(final OutputStream out) throws IOException
+    {
+        if (out == null)
+        {
+            throw new IllegalArgumentException(
+                    "BUG - Given OutputStream cannot be null.");
+        }
+
+        final MessageDigest messageDigest = getMD5Digest();
+        final ByteCountOutputStream outputStream =
+                new ByteCountOutputStream(out);
+        final BufferedInputStream bis =
+                new BufferedInputStream(getSourceInputStream(), getBufferSize());
+        final byte[] buffer = new byte[getBufferSize()];
+        int bytesRead;
+
+        while ((bytesRead = bis.read(buffer)) >= 0)
+        {
+            messageDigest.update(buffer, 0, bytesRead);
+            outputStream.write(buffer, 0, bytesRead);
+        }
+
+        setByteCount(outputStream.getByteCount());
+        setCalculatedMD5(messageDigest.digest());
+    }
+
+    /**
+     * Obtain a new MD5 digester.
+     *
+     * @return MessageDigest instance.
+     */
+    protected MessageDigest getMD5Digest()
+    {
+        try
+        {
+            return MessageDigest.getInstance("MD5");
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            throw new ResourceException(Status.SERVER_ERROR_INTERNAL, e);
         }
     }
 
-    private void handleFolder() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
-        final ContainerNode containerNode = new ContainerNode(getCurrentName());
-        PathUtils.augmentParents(getCurrentPath(), containerNode);
 
-        final JSONObject payload = (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY);
-        folderHandler.move(payload, containerNode);
+    protected InputStream getSourceInputStream()
+    {
+        return sourceInputStream;
     }
 
-    private void handleItem() throws Exception {
-        final StorageHandler storageHandler = new StorageHandler(this.currentService, getCurrentSubject());
-        final boolean isRecursiveSet = storageHandler.updatePermissions(getCurrentPath(),
-                                                                        (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY));
-        this.syncOutput.setCode(isRecursiveSet ? HttpServletResponse.SC_ACCEPTED : HttpServletResponse.SC_OK);
+    public int getBufferSize()
+    {
+        return bufferSize;
     }
 
-    @Override
-    protected InlineContentHandler getInlineContentHandler() {
-        return new JSONInlineContentHandler();
+    public long getByteCount()
+    {
+        return byteCount;
+    }
+
+    public void setByteCount(long byteCount)
+    {
+        this.byteCount = byteCount;
+    }
+
+    public byte[] getCalculatedMD5()
+    {
+        return calculatedMD5;
+    }
+
+    public void setCalculatedMD5(byte[] calculatedMD5)
+    {
+        this.calculatedMD5 = calculatedMD5;
     }
 }

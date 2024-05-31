@@ -3,7 +3,7 @@
  *******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
  **************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
  *
- *  (c) 2024.                            (c) 2024.
+ *  (c) 2016.                            (c) 2016.
  *  Government of Canada                 Gouvernement du Canada
  *  National Research Council            Conseil national de recherches
  *  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -68,51 +68,37 @@
 
 package org.opencadc.storage;
 
-import ca.nrc.cadc.rest.InlineContentHandler;
-import javax.servlet.http.HttpServletResponse;
-import org.json.JSONObject;
-
-import org.opencadc.storage.node.FolderHandler;
-import org.opencadc.storage.node.StorageHandler;
-import org.opencadc.vospace.ContainerNode;
+import ca.nrc.cadc.util.HexUtil;
+import ca.nrc.cadc.util.StringUtil;
+import net.canfar.storage.UploadVerificationFailedException;
 
 
-public class PostAction extends StorageAction {
-    @Override
-    public void doAction() throws Exception {
-        final StorageItemContext storageItemType = getStorageItemType();
+public class UploadVerifier {
+    /**
+     * Verify the given MD5.
+     * <p>
+     * Note that the given MD5 will be converted to a Hex string, and then
+     * the string will be compared to what the returned Node provided.
+     *
+     * @param calculatedMD5 The byte array of the calculated MD5.
+     * @param serverMD5     The server reported MD5.
+     * @throws UploadVerificationFailedException Any upload error, such as bad filename.
+     */
+    public void verifyMD5(final byte[] calculatedMD5, final String serverMD5) throws UploadVerificationFailedException {
+        if (calculatedMD5 == null) {
+            throw new IllegalArgumentException("The calculated MD5 cannot be null.");
+        } else if (serverMD5 == null) {
+            throw new IllegalArgumentException("The server MD5 cannot be null.");
+        }
 
-        switch (storageItemType) {
-            case FOLDER:
-                handleFolder();
-                break;
-            case ITEM:
-                handleItem();
-                break;
-            default: {
-                throw new UnsupportedOperationException("No POST supported for " + storageItemType);
+        if (!StringUtil.hasLength(serverMD5)) {
+            throw new UploadVerificationFailedException(
+                "** ERROR YOUR UPLOAD DID NOT SUCCEED ** " + "MD5 checksum was not produced by " + "service!  This was not expected, please "
+                + "contact canfarhelp@nrc-cnrc.gc.ca for " + "assistance.");
+        } else {
+            if (!HexUtil.toHex(calculatedMD5).equals(serverMD5)) {
+                throw new UploadVerificationFailedException("** ERROR ** - Upload did not succeed: " + "MD5 checksum failed.");
             }
         }
-    }
-
-    private void handleFolder() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
-        final ContainerNode containerNode = new ContainerNode(getCurrentName());
-        PathUtils.augmentParents(getCurrentPath(), containerNode);
-
-        final JSONObject payload = (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY);
-        folderHandler.move(payload, containerNode);
-    }
-
-    private void handleItem() throws Exception {
-        final StorageHandler storageHandler = new StorageHandler(this.currentService, getCurrentSubject());
-        final boolean isRecursiveSet = storageHandler.updatePermissions(getCurrentPath(),
-                                                                        (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY));
-        this.syncOutput.setCode(isRecursiveSet ? HttpServletResponse.SC_ACCEPTED : HttpServletResponse.SC_OK);
-    }
-
-    @Override
-    protected InlineContentHandler getInlineContentHandler() {
-        return new JSONInlineContentHandler();
     }
 }

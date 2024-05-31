@@ -81,11 +81,10 @@ public class UploadVerifier {
      * the string will be compared to what the returned Node provided.
      *
      * @param calculatedMD5 The byte array of the calculated MD5.
-     * @param serverMD5          The server reported MD5.
+     * @param serverMD5     The server reported MD5.
      * @throws UploadVerificationFailedException Any upload error, such as bad filename.
      */
-    public void verifyMD5(final byte[] calculatedMD5, final String serverMD5)
-            throws UploadVerificationFailedException {
+    public void verifyMD5(final byte[] calculatedMD5, final String serverMD5) throws UploadVerificationFailedException {
         if (calculatedMD5 == null) {
             throw new IllegalArgumentException("The calculated MD5 cannot be null.");
         } else if (serverMD5 == null) {
@@ -93,16 +92,12 @@ public class UploadVerifier {
         }
 
         if (!StringUtil.hasLength(serverMD5)) {
-            throw new UploadVerificationFailedException("** ERROR YOUR UPLOAD DID NOT SUCCEED ** "
-                                                        + "MD5 checksum was not produced by "
-                                                        + "service!  This was not expected, please "
-                                                        + "contact canfarhelp@nrc-cnrc.gc.ca for "
-                                                        + "assistance.");
+            throw new UploadVerificationFailedException(
+                "** ERROR YOUR UPLOAD DID NOT SUCCEED ** " + "MD5 checksum was not produced by " + "service!  This was not expected, please "
+                + "contact canfarhelp@nrc-cnrc.gc.ca for " + "assistance.");
         } else {
             if (!HexUtil.toHex(calculatedMD5).equals(serverMD5)) {
-                throw new UploadVerificationFailedException(
-                        "** ERROR ** - Upload did not succeed: "
-                        + "MD5 checksum failed.");
+                throw new UploadVerificationFailedException("** ERROR ** - Upload did not succeed: " + "MD5 checksum failed.");
             }
         }
     }

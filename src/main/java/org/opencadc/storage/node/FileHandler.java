@@ -71,19 +71,27 @@ package org.opencadc.storage.node;
 import ca.nrc.cadc.auth.AuthMethod;
 import ca.nrc.cadc.auth.AuthenticationUtil;
 import ca.nrc.cadc.auth.AuthorizationToken;
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.reg.Standards;
 import ca.nrc.cadc.util.StringUtil;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.security.auth.Subject;
 import net.canfar.storage.PathUtils;
+import net.canfar.storage.web.UploadOutputStreamWrapper;
+import net.canfar.storage.web.UploadOutputStreamWrapperImpl;
+import net.canfar.storage.web.UploadVerifier;
 import org.apache.log4j.Logger;
 import org.opencadc.storage.config.VOSpaceServiceConfig;
 import org.opencadc.vospace.ContainerNode;
@@ -95,7 +103,10 @@ import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.View;
 import org.opencadc.vospace.client.ClientTransfer;
 
+import org.opencadc.vospace.client.VOSClientUtil;
+import org.opencadc.vospace.client.VOSpaceClient;
 import org.opencadc.vospace.client.async.RecursiveSetNode;
+import org.opencadc.vospace.server.Utils;
 import org.opencadc.vospace.transfer.Direction;
 import org.opencadc.vospace.transfer.Protocol;
 import org.opencadc.vospace.transfer.Transfer;
@@ -103,6 +114,10 @@ import org.opencadc.vospace.transfer.Transfer;
 
 public class FileHandler extends StorageHandler {
     private static final Logger LOGGER = Logger.getLogger(FileHandler.class);
+    private final static AuthMethod[] PROTOCOL_AUTH_METHODS = new AuthMethod[] {AuthMethod.ANON, AuthMethod.CERT, AuthMethod.COOKIE};
+    private static final int BUFFER_SIZE = 8192;
+
+    private final UploadVerifier uploadVerifier = new UploadVerifier();
 
 
     public FileHandler(VOSpaceServiceConfig currentService, Subject subject) {
@@ -119,6 +134,78 @@ public class FileHandler extends StorageHandler {
     public String getDownloadEndpoint(final Path nodePath) throws Exception {
         final DataNode dataNode = getNode(nodePath, null, null);
         return getDownloadEndpoint(dataNode);
+    }
+
+    /**
+     * Do the secure upload.
+     *
+     * @param inputStream The InputStream to pull from.
+     * @param dataNode    The DataNode to upload to.
+     * @param contentType The file content type.
+     */
+    public Path upload(final InputStream inputStream, final DataNode dataNode, final String contentType) throws Exception {
+        final UploadOutputStreamWrapper outputStreamWrapper = new UploadOutputStreamWrapperImpl(inputStream, FileHandler.BUFFER_SIZE);
+        final Path dataNodePath = Paths.get(Utils.getPath(dataNode));
+
+        return Subject.doAs(this.subject, (PrivilegedExceptionAction<Path>) () -> {
+            final VOSpaceClient voSpaceClient = this.currentService.getVOSpaceClient();
+            try {
+                // Due to a bug in VOSpace that returns a 400 while checking
+                // for an existing Node, we will work around it by checking manually
+                // rather than looking for a NodeNotFoundException as expected, and
+                // return the 409 code, while maintaining backward compatibility with the catch below.
+                // jenkinsd 2016.07.25
+                voSpaceClient.getNode(dataNodePath.toString(), null);
+            } catch (IllegalStateException e) {
+                final Throwable illegalStateCause = e.getCause();
+                if (illegalStateCause instanceof ResourceNotFoundException) {
+                    voSpaceClient.createNode(this.currentService.toURI(dataNode), dataNode);
+                } else {
+                    throw new IllegalArgumentException(e.getMessage(), e);
+                }
+            } catch (ResourceNotFoundException notFoundException) {
+                voSpaceClient.createNode(this.currentService.toURI(dataNode), dataNode);
+            }
+
+            upload(outputStreamWrapper, dataNode, contentType);
+
+            return dataNodePath;
+        });
+    }
+
+    /**
+     * Abstract away the Transfer stuff.  It's cumbersome.
+     *
+     * @param outputStreamWrapper The OutputStream wrapper.
+     * @param dataNode            The node to upload.
+     * @param contentType         The file content type.
+     * @throws Exception To capture transfer and upload failures.
+     */
+    void upload(final UploadOutputStreamWrapper outputStreamWrapper, final DataNode dataNode, final String contentType) throws Exception {
+        final VOSURI dataNodeVOSURI = this.currentService.toURI(dataNode);
+
+        final List<Protocol> protocols = Arrays.stream(FileHandler.PROTOCOL_AUTH_METHODS).map(authMethod -> {
+            final Protocol httpsAuth = new Protocol(VOS.PROTOCOL_HTTPS_PUT);
+            httpsAuth.setSecurityMethod(Standards.getSecurityMethod(authMethod));
+            return httpsAuth;
+        }).collect(Collectors.toList());
+
+        final Transfer transfer = new Transfer(dataNodeVOSURI.getURI(), Direction.pushToVoSpace);
+        transfer.setView(new View(VOS.VIEW_DEFAULT));
+        transfer.getProtocols().addAll(protocols);
+        transfer.version = VOS.VOSPACE_21;
+
+        final ClientTransfer ct = this.currentService.getVOSpaceClient().createTransfer(transfer);
+        ct.setRequestProperty("content-type", contentType);
+        ct.setOutputStreamWrapper(outputStreamWrapper);
+        ct.runTransfer();
+
+        // Check uws job status
+        VOSClientUtil.checkTransferFailure(ct);
+
+        if (ct.getHttpTransferDetails().getDigest() != null) {
+            uploadVerifier.verifyMD5(outputStreamWrapper.getCalculatedMD5(), ct.getHttpTransferDetails().getDigest().getSchemeSpecificPart());
+        }
     }
 
     /**

@@ -68,60 +68,22 @@
 
 package org.opencadc.storage;
 
-import ca.nrc.cadc.auth.AuthMethod;
 import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.net.TransientException;
-import ca.nrc.cadc.reg.Standards;
 import ca.nrc.cadc.rest.InlineContentException;
 import ca.nrc.cadc.rest.InlineContentHandler;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.security.PrivilegedExceptionAction;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-import javax.security.auth.Subject;
-import net.canfar.storage.web.UploadOutputStreamWrapper;
-import net.canfar.storage.web.UploadOutputStreamWrapperImpl;
-import net.canfar.storage.web.UploadVerifier;
-import org.opencadc.storage.config.VOSpaceServiceConfig;
-import org.opencadc.vospace.DataNode;
-import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.VOSURI;
-import org.opencadc.vospace.View;
-import org.opencadc.vospace.client.ClientTransfer;
-import org.opencadc.vospace.client.VOSClientUtil;
-import org.opencadc.vospace.client.VOSpaceClient;
-import org.opencadc.vospace.server.Utils;
-import org.opencadc.vospace.transfer.Direction;
-import org.opencadc.vospace.transfer.Protocol;
-import org.opencadc.vospace.transfer.Transfer;
+
 
 public class FileUploadInlineContentHandler implements InlineContentHandler {
-    private final static AuthMethod[] PROTOCOL_AUTH_METHODS = new AuthMethod[] {AuthMethod.ANON, AuthMethod.CERT, AuthMethod.COOKIE};
-    private static final int BUFFER_SIZE = 8192;
-    private final UploadVerifier uploadVerifier;
-    private final Subject subject;
-    private final VOSpaceServiceConfig currentService;
-
-
-    public FileUploadInlineContentHandler(VOSpaceServiceConfig currentService, UploadVerifier uploadVerifier, Subject subject) {
-        this.currentService = currentService;
-        this.uploadVerifier = uploadVerifier;
-        this.subject = subject;
-    }
-
     @Override
     public Content accept(String fileName, String fileContentType, InputStream fileInputStream)
         throws InlineContentException, IOException, ResourceNotFoundException, TransientException {
-        final DataNode dataNode = new DataNode(fileName);
         try {
-            final Path nodePath = upload(fileInputStream, dataNode, fileContentType);
             final Content content = new Content();
-            content.name = fileName;
-            content.value = nodePath;
+            content.name = "file:" + fileName;
+            content.value = new FileUpload(fileContentType, fileInputStream);
 
             return content;
         } catch (Exception exception) {
@@ -129,75 +91,13 @@ public class FileUploadInlineContentHandler implements InlineContentHandler {
         }
     }
 
-    /**
-     * Do the secure upload.
-     *
-     * @param inputStream The InputStream to pull from.
-     * @param dataNode    The DataNode to upload to.
-     * @param contentType The file content type.
-     */
-    protected Path upload(final InputStream inputStream, final DataNode dataNode, final String contentType) throws Exception {
-        final UploadOutputStreamWrapper outputStreamWrapper = new UploadOutputStreamWrapperImpl(inputStream, FileUploadInlineContentHandler.BUFFER_SIZE);
-        final Path dataNodePath = Paths.get(Utils.getPath(dataNode));
+    static class FileUpload {
+        final String contentType;
+        final InputStream inputStream;
 
-        return Subject.doAs(this.subject, (PrivilegedExceptionAction<Path>) () -> {
-            final VOSpaceClient voSpaceClient = this.currentService.getVOSpaceClient();
-            try {
-                // Due to a bug in VOSpace that returns a 400 while checking
-                // for an existing Node, we will work around it by checking manually
-                // rather than looking for a NodeNotFoundException as expected, and
-                // return the 409 code, while maintaining backward compatibility with the catch below.
-                // jenkinsd 2016.07.25
-                voSpaceClient.getNode(dataNodePath.toString(), null);
-            } catch (IllegalStateException e) {
-                final Throwable illegalStateCause = e.getCause();
-                if (illegalStateCause instanceof ResourceNotFoundException) {
-                    voSpaceClient.createNode(this.currentService.toURI(dataNode), dataNode);
-                } else {
-                    throw new IllegalArgumentException(e.getMessage(), e);
-                }
-            } catch (ResourceNotFoundException notFoundException) {
-                voSpaceClient.createNode(this.currentService.toURI(dataNode), dataNode);
-            }
-
-            upload(outputStreamWrapper, dataNode, contentType);
-
-            return dataNodePath;
-        });
-    }
-
-    /**
-     * Abstract away the Transfer stuff.  It's cumbersome.
-     *
-     * @param outputStreamWrapper The OutputStream wrapper.
-     * @param dataNode            The node to upload.
-     * @param contentType         The file content type.
-     * @throws Exception To capture transfer and upload failures.
-     */
-    void upload(final UploadOutputStreamWrapper outputStreamWrapper, final DataNode dataNode, final String contentType) throws Exception {
-        final VOSURI dataNodeVOSURI = this.currentService.toURI(dataNode);
-
-        final List<Protocol> protocols = Arrays.stream(FileUploadInlineContentHandler.PROTOCOL_AUTH_METHODS).map(authMethod -> {
-            final Protocol httpsAuth = new Protocol(VOS.PROTOCOL_HTTPS_PUT);
-            httpsAuth.setSecurityMethod(Standards.getSecurityMethod(authMethod));
-            return httpsAuth;
-        }).collect(Collectors.toList());
-
-        final Transfer transfer = new Transfer(dataNodeVOSURI.getURI(), Direction.pushToVoSpace);
-        transfer.setView(new View(VOS.VIEW_DEFAULT));
-        transfer.getProtocols().addAll(protocols);
-        transfer.version = VOS.VOSPACE_21;
-
-        final ClientTransfer ct = this.currentService.getVOSpaceClient().createTransfer(transfer);
-        ct.setRequestProperty("content-type", contentType);
-        ct.setOutputStreamWrapper(outputStreamWrapper);
-        ct.runTransfer();
-
-        // Check uws job status
-        VOSClientUtil.checkTransferFailure(ct);
-
-        if (ct.getHttpTransferDetails().getDigest() != null) {
-            uploadVerifier.verifyMD5(outputStreamWrapper.getCalculatedMD5(), ct.getHttpTransferDetails().getDigest().getSchemeSpecificPart());
+        public FileUpload(String contentType, InputStream inputStream) {
+            this.contentType = contentType;
+            this.inputStream = inputStream;
         }
     }
 }

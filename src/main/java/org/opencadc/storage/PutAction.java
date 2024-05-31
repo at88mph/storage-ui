@@ -71,10 +71,11 @@ package org.opencadc.storage;
 
 import ca.nrc.cadc.rest.InlineContentHandler;
 import javax.servlet.http.HttpServletResponse;
-import net.canfar.storage.web.UploadVerifier;
 import org.json.JSONObject;
+import org.opencadc.storage.node.FileHandler;
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.storage.node.LinkHandler;
+import org.opencadc.vospace.DataNode;
 
 
 public class PutAction extends StorageAction {
@@ -98,8 +99,21 @@ public class PutAction extends StorageAction {
         }
     }
 
-    private void handleFile() {
-
+    private void handleFile() throws Exception {
+        final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
+        final boolean isInheritPermissions = this.syncInput.getContent("inheritPermissionsCheckBox") != null;
+        if (isInheritPermissions) {
+            for (final String contentName : this.syncInput.getContentNames()) {
+                if (contentName.startsWith("file:")) {
+                    final String fileName = contentName.substring("file:".length());
+                    final FileUploadInlineContentHandler.FileUpload fileUpload =
+                        (FileUploadInlineContentHandler.FileUpload) this.syncInput.getContent(contentName);
+                    final DataNode dataNode = new DataNode(fileName);
+                    fileHandler.upload(fileUpload.inputStream, new DataNode(fileName), fileUpload.contentType);
+                    fileHandler.setInheritedPermissions(PathUtils.toPath(dataNode));
+                }
+            }
+        }
     }
 
     private void handleFolder() throws Exception {
@@ -117,7 +131,7 @@ public class PutAction extends StorageAction {
     @Override
     protected InlineContentHandler getInlineContentHandler() {
         try {
-            return new PutInlineContentHandler(this.currentService, getCurrentSubject(), new UploadVerifier());
+            return new PutInlineContentHandler();
         } catch (Exception exception) {
             throw new RuntimeException(exception.getMessage(), exception);
         }
