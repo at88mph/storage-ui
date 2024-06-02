@@ -85,6 +85,7 @@ import net.canfar.storage.web.view.FolderItem;
 import net.canfar.storage.web.view.FreeMarkerConfiguration;
 import org.opencadc.vospace.client.VOSpaceClient;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
 import org.restlet.ext.freemarker.TemplateRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;

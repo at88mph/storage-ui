@@ -71,6 +71,7 @@ package org.opencadc.storage;
 import ca.nrc.cadc.net.TransientException;
 import ca.nrc.cadc.rest.InlineContentException;
 import ca.nrc.cadc.rest.InlineContentHandler;
+import ca.nrc.cadc.util.StringUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import org.json.JSONObject;
@@ -85,12 +86,16 @@ public class JSONInlineContentHandler implements InlineContentHandler {
     public Content accept(String name, String contentType, InputStream inputStream) throws InlineContentException, IOException, TransientException {
         if (contentType != null && contentType.equals("application/json")) {
             final String jsonString = new String(inputStream.readAllBytes());
-            final JSONObject jsonObject = new JSONObject(jsonString);
-            final InlineContentHandler.Content payloadContent = new InlineContentHandler.Content();
-            payloadContent.name = JSONInlineContentHandler.PAYLOAD_KEY;
-            payloadContent.value = jsonObject;
+            if (StringUtil.hasText(jsonString)) {
+                final JSONObject jsonObject = new JSONObject(jsonString);
+                final InlineContentHandler.Content payloadContent = new InlineContentHandler.Content();
+                payloadContent.name = JSONInlineContentHandler.PAYLOAD_KEY;
+                payloadContent.value = jsonObject;
 
-            return payloadContent;
+                return payloadContent;
+            } else {
+                throw new InlineContentException("Sent empty JSON body.");
+            }
         } else {
             throw new InlineContentException("Unsupported content type: " + contentType);
         }

@@ -69,6 +69,7 @@
 package org.opencadc.storage;
 
 import ca.nrc.cadc.rest.InlineContentHandler;
+import java.nio.file.Path;
 import javax.servlet.http.HttpServletResponse;
 import org.json.JSONObject;
 
@@ -97,11 +98,21 @@ public class PostAction extends StorageAction {
 
     private void handleFolder() throws Exception {
         final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
-        final ContainerNode containerNode = new ContainerNode(getCurrentName());
-        PathUtils.augmentParents(getCurrentPath(), containerNode);
-
         final JSONObject payload = (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY);
-        folderHandler.move(payload, containerNode);
+        if (payload == null) {
+            throw new IllegalArgumentException("No payload passed in.");
+        } else if (payload.has("srcNodes")) {
+            final ContainerNode containerNode = new ContainerNode(getCurrentName());
+            PathUtils.augmentParents(getCurrentPath(), containerNode);
+            folderHandler.move(payload, containerNode);
+        } else if (payload.has("name")) {
+            final String newFolderName = payload.getString("name");
+            final Path path = Path.of(getCurrentPath().toString(), newFolderName);
+            folderHandler.create(path);
+            this.syncOutput.setCode(HttpServletResponse.SC_CREATED);
+        } else {
+            throw new IllegalArgumentException("Unsupported action: " + payload.keySet());
+        }
     }
 
     private void handleItem() throws Exception {

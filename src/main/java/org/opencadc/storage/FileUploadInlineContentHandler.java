@@ -82,7 +82,7 @@ public class FileUploadInlineContentHandler implements InlineContentHandler {
         throws InlineContentException, IOException, ResourceNotFoundException, TransientException {
         try {
             final Content content = new Content();
-            content.name = "file:" + fileName;
+            content.name = fileName;
             content.value = new FileUpload(fileContentType, fileInputStream);
 
             return content;

@@ -1252,27 +1252,23 @@ function fileManager(
                   contextPath +
                   vospaceServicePath +
                   config.options.folderConnector +
-                  getCurrentPath() +
-                  '/' +
-                  encodeURIComponent(fname),
-                method: 'PUT',
+                  getCurrentPath(),
+                method: 'POST',
                 contentType: 'application/json',
-                success: function( data, textStatus, jqXHR) {
+                data: JSON.stringify({'name': fname}),
+                success: () => {
                   $.prompt(lg.successful_added_folder, {
                     submit: refreshPage
                   })
                 },
-                error: function(jqXHR, textStatus, errorThrown) {
-                  var errMsg = ''
-
+                error: (jqXHR, _textStatus, errorThrown) => {
                   switch (jqXHR.status) {
                     case 409:
-                      errMsg = lg.DIRECTORY_ALREADY_EXISTS.replace(/%s/g, formVals['destNode'])
+                      $.prompt(lg.DIRECTORY_ALREADY_EXISTS.replace(/%s/g, formVals['destNode']))
                       break
                     default:
-                      errMsg = getErrorMsg(jqXHR, errorThrown)
+                      $.prompt(getErrorMsg(jqXHR, errorThrown))
                   }
-                  $.prompt(errMsg )
                 }
               })
             } else {
