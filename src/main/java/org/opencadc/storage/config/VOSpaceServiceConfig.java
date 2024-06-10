@@ -72,6 +72,7 @@ import ca.nrc.cadc.reg.client.LocalAuthority;
 import ca.nrc.cadc.util.StringUtil;
 import net.canfar.storage.PathUtils;
 import org.opencadc.vospace.Node;
+import org.opencadc.vospace.VOS;
 import org.opencadc.vospace.VOSURI;
 
 import java.net.URI;
@@ -139,8 +140,12 @@ public class VOSpaceServiceConfig {
         return this.features.supportsPaging;
     }
 
+    public VOSURI toURI(final Path path) throws URISyntaxException {
+        return toURI(path.toString());
+    }
+
     public VOSURI toURI(final String path) throws URISyntaxException {
-        return new VOSURI(new URI(this.nodeResourceID + path));
+        return new VOSURI(new URI(this.nodeResourceID + PathUtils.ensureSlashPrepended(path)));
     }
 
     public VOSURI toURI(final Node node) throws URISyntaxException {

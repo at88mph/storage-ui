@@ -3,7 +3,7 @@
  *******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
  **************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
  *
- *  (c) 2023.                            (c) 2023.
+ *  (c) 2016.                            (c) 2016.
  *  Government of Canada                 Gouvernement du Canada
  *  National Research Council            Conseil national de recherches
  *  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -66,52 +66,18 @@
  ************************************************************************
  */
 
-package net.canfar.storage;
+package org.opencadc.storage;
 
-import org.opencadc.vospace.ContainerNode;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.server.Utils;
+import java.io.IOException;
+import net.canfar.storage.web.view.StorageItem;
 
-import java.io.File;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Arrays;
 
-public class PathUtils {
-
+public interface StorageItemWriter {
     /**
-     * Augment the parents of the given node, using elements from the node's path.
-     * @param nodePath  The Path of the node, NOT its parent.
-     * @param node      The Node to update.
+     * Write out a StorageItem as per the implementation.
+     *
+     * @param storageItem The storage item to write out.
+     * @throws IOException If the writing fails.
      */
-    public static void augmentParents(final Path nodePath, final Node node) {
-        Node currNode = node;
-        Path currPath = nodePath.getParent();
-        for (; (currPath != null) && (currPath.getRoot() != currPath); currPath = currPath.getParent()) {
-            final ContainerNode containerNode = new ContainerNode(currPath.getFileName().toString());
-            currNode.parent = containerNode;
-            currNode = containerNode;
-        }
-    }
-
-    public static Path toPath(final Node node) {
-        final String[] pathElements = Utils.getPath(node).split("/");
-        if (pathElements.length > 1) {
-            return Paths.get(File.separator + pathElements[0], Arrays.copyOfRange(pathElements, 1, pathElements.length));
-        } else {
-            return Paths.get(File.separator + pathElements[0]);
-        }
-    }
-
-    public static Path ensureSlashPrepended(final Path path) {
-        if (path.getRoot() == null) {
-            return Path.of("/" + path);
-        } else {
-            return path;
-        }
-    }
-
-    public static String ensureSlashPrepended(final String stringPath) {
-        return PathUtils.ensureSlashPrepended(Path.of(stringPath)).toString();
-    }
+    void write(final StorageItem storageItem) throws IOException;
 }

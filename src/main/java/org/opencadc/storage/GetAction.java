@@ -68,7 +68,6 @@
 
 package org.opencadc.storage;
 
-
 import ca.nrc.cadc.util.StringUtil;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
@@ -80,7 +79,9 @@ import org.opencadc.storage.config.StorageConfiguration;
 import org.opencadc.storage.node.FileHandler;
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.storage.node.LinkHandler;
+import org.opencadc.storage.node.PageHandler;
 import org.opencadc.token.Client;
+import org.opencadc.vospace.VOSURI;
 
 
 public class GetAction extends StorageAction {
@@ -110,6 +111,8 @@ public class GetAction extends StorageAction {
                     handleList();
                     break;
                 case PAGE:
+                    handlePage();
+                    break;
                 default: {
                     throw new UnsupportedOperationException("No GET support for " + storageItemType + " with service " + this.currentService.getName());
                 }
@@ -138,6 +141,17 @@ public class GetAction extends StorageAction {
         final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
         folderHandler.writePage(getCurrentPath(), null, getVOSpaceServiceList(), getDisplayName(),
                                 this.storageConfiguration.getFreeMarkerConfiguration(this.syncInput.getContextPath()), writer);
+    }
+
+    void handlePage() throws Exception {
+        final String startURIParameterValue = this.syncInput.getParameter("startURI");
+        final String pageSizeParameterValue = this.syncInput.getParameter("pageSize");
+        final VOSURI startURI = StringUtil.hasLength(startURIParameterValue) ? new VOSURI(URI.create(startURIParameterValue)) : null;
+        final Integer pageSize = StringUtil.hasLength(pageSizeParameterValue) ? Integer.parseInt(pageSizeParameterValue) : null;
+        final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
+
+        final PageHandler pageHandler = new PageHandler(this.currentService, getCurrentSubject(), this.currentService.toURI(getCurrentPath()), startURI);
+        pageHandler.writePage(writer, getStorageItemFactory(), pageSize);
     }
 
     void handleOIDCCallback() throws Exception {

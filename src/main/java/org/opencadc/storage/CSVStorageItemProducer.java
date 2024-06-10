@@ -3,7 +3,7 @@
  *******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
  **************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
  *
- *  (c) 2023.                            (c) 2023.
+ *  (c) 2016.                            (c) 2016.
  *  Government of Canada                 Gouvernement du Canada
  *  National Research Council            Conseil national de recherches
  *  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -66,52 +66,39 @@
  ************************************************************************
  */
 
-package net.canfar.storage;
+package org.opencadc.storage;
 
-import org.opencadc.vospace.ContainerNode;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.server.Utils;
+import javax.security.auth.Subject;
+import org.opencadc.storage.config.VOSpaceServiceConfig;
+import org.opencadc.vospace.VOSURI;
+import org.opencadc.vospace.client.VOSpaceClient;
 
-import java.io.File;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Arrays;
 
-public class PathUtils {
+public class CSVStorageItemProducer extends AbstractStorageItemProducer<StorageItemCSVWriter> {
+    public CSVStorageItemProducer(Integer pageSize, VOSURI folderURI, VOSURI startURI,
+                                  final StorageItemCSVWriter nodeWriter,
+                                  final Subject user,
+                                  final StorageItemFactory storageItemFactory,
+                                  final VOSpaceServiceConfig serviceConfig,
+                                  final VOSpaceClient voSpaceClient) {
+        super(pageSize, folderURI, startURI, nodeWriter, user,
+              storageItemFactory, serviceConfig, voSpaceClient);
+    }
+
 
     /**
-     * Augment the parents of the given node, using elements from the node's path.
-     * @param nodePath  The Path of the node, NOT its parent.
-     * @param node      The Node to update.
+     * When an object implementing interface <code>Runnable</code> is used
+     * to create a thread, starting the thread causes the object's
+     * <code>run</code> method to be called in that separately executing
+     * thread.
+     * <p>The general contract of the method <code>run</code> is that it may take any action whatsoever.</p>
      */
-    public static void augmentParents(final Path nodePath, final Node node) {
-        Node currNode = node;
-        Path currPath = nodePath.getParent();
-        for (; (currPath != null) && (currPath.getRoot() != currPath); currPath = currPath.getParent()) {
-            final ContainerNode containerNode = new ContainerNode(currPath.getFileName().toString());
-            currNode.parent = containerNode;
-            currNode = containerNode;
+    @Override
+    public void run() {
+        try {
+            writePages();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-    }
-
-    public static Path toPath(final Node node) {
-        final String[] pathElements = Utils.getPath(node).split("/");
-        if (pathElements.length > 1) {
-            return Paths.get(File.separator + pathElements[0], Arrays.copyOfRange(pathElements, 1, pathElements.length));
-        } else {
-            return Paths.get(File.separator + pathElements[0]);
-        }
-    }
-
-    public static Path ensureSlashPrepended(final Path path) {
-        if (path.getRoot() == null) {
-            return Path.of("/" + path);
-        } else {
-            return path;
-        }
-    }
-
-    public static String ensureSlashPrepended(final String stringPath) {
-        return PathUtils.ensureSlashPrepended(Path.of(stringPath)).toString();
     }
 }

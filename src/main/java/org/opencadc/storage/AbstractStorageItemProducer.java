@@ -66,18 +66,9 @@
  ************************************************************************
  */
 
-package net.canfar.storage;
+package org.opencadc.storage;
 
 import ca.nrc.cadc.net.NetUtil;
-import net.canfar.storage.web.config.VOSpaceServiceConfig;
-import org.opencadc.vospace.ContainerNode;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.VOSURI;
-import org.opencadc.vospace.client.VOSpaceClient;
-import net.canfar.storage.web.StorageItemFactory;
-
-import javax.security.auth.Subject;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Paths;
@@ -88,6 +79,13 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import javax.security.auth.Subject;
+import org.opencadc.storage.config.VOSpaceServiceConfig;
+import org.opencadc.vospace.ContainerNode;
+import org.opencadc.vospace.Node;
+import org.opencadc.vospace.VOS;
+import org.opencadc.vospace.VOSURI;
+import org.opencadc.vospace.client.VOSpaceClient;
 
 
 abstract class AbstractStorageItemProducer<T extends StorageItemWriter> implements StorageItemProducer {
@@ -170,11 +168,6 @@ abstract class AbstractStorageItemProducer<T extends StorageItemWriter> implemen
 
             return true;
         }
-    }
-
-    @Override
-    public VOSURI getLastWrittenURI() {
-        return this.current;
     }
 
     @Override
