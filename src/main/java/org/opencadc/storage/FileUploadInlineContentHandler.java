@@ -68,27 +68,18 @@
 
 package org.opencadc.storage;
 
-import ca.nrc.cadc.net.ResourceNotFoundException;
-import ca.nrc.cadc.net.TransientException;
-import ca.nrc.cadc.rest.InlineContentException;
 import ca.nrc.cadc.rest.InlineContentHandler;
-import java.io.IOException;
 import java.io.InputStream;
 
 
 public class FileUploadInlineContentHandler implements InlineContentHandler {
     @Override
-    public Content accept(String fileName, String fileContentType, InputStream fileInputStream)
-        throws InlineContentException, IOException, ResourceNotFoundException, TransientException {
-        try {
-            final Content content = new Content();
-            content.name = fileName;
-            content.value = new FileUpload(fileContentType, fileInputStream);
+    public Content accept(String fileName, String fileContentType, InputStream fileInputStream) {
+        final Content content = new Content();
+        content.name = fileName;
+        content.value = new FileUpload(fileContentType, fileInputStream);
 
-            return content;
-        } catch (Exception exception) {
-            throw new RuntimeException(exception.getMessage(), exception);
-        }
+        return content;
     }
 
     static class FileUpload {

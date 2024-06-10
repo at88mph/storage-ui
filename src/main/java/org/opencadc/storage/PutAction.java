@@ -98,12 +98,13 @@ public class PutAction extends StorageAction {
     private void handleFile() throws Exception {
         final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
         final boolean isInheritPermissions = this.syncInput.getContent("inheritPermissionsCheckBox") != null;
-        if (isInheritPermissions) {
-            for (final String contentName : this.syncInput.getContentNames()) {
-                final Object contentValue = this.syncInput.getContent(contentName);
-                final FileUploadInlineContentHandler.FileUpload fileUpload = (FileUploadInlineContentHandler.FileUpload) contentValue;
-                final DataNode dataNode = new DataNode(contentName);
-                fileHandler.upload(fileUpload.inputStream, new DataNode(contentName), fileUpload.contentType);
+        for (final String contentName : this.syncInput.getContentNames()) {
+            final Object contentValue = this.syncInput.getContent(contentName);
+            final FileUploadInlineContentHandler.FileUpload fileUpload = (FileUploadInlineContentHandler.FileUpload) contentValue;
+            final DataNode dataNode = new DataNode(contentName);
+            PathUtils.augmentParents(getCurrentPath(), dataNode);
+            fileHandler.upload(fileUpload.inputStream, dataNode, fileUpload.contentType);
+            if (isInheritPermissions) {
                 fileHandler.setInheritedPermissions(PathUtils.toPath(dataNode));
             }
         }
@@ -117,10 +118,6 @@ public class PutAction extends StorageAction {
 
     @Override
     protected InlineContentHandler getInlineContentHandler() {
-        try {
-            return new FileUploadInlineContentHandler();
-        } catch (Exception exception) {
-            throw new RuntimeException(exception.getMessage(), exception);
-        }
+        return new PutInlineContentHandler();
     }
 }

@@ -68,9 +68,15 @@
 
 package org.opencadc.storage;
 
+import java.security.PrivilegedExceptionAction;
+import javax.security.auth.Subject;
+
 public class DeleteAction extends StorageAction {
     @Override
     public void doAction() throws Exception {
-        getVOSpaceClient().deleteNode(getCurrentPath().toString());
+        Subject.doAs(getCurrentSubject(), (PrivilegedExceptionAction<Void>) () -> {
+            getVOSpaceClient().deleteNode(getCurrentPath().toString());
+            return null;
+        });
     }
 }
