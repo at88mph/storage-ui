@@ -65,19 +65,18 @@
  *
  ************************************************************************
  */
+
 package org.opencadc.storage.config;
 
 import ca.nrc.cadc.reg.Standards;
 import ca.nrc.cadc.reg.client.LocalAuthority;
 import ca.nrc.cadc.util.StringUtil;
-import net.canfar.storage.PathUtils;
-import org.opencadc.vospace.Node;
-import org.opencadc.vospace.VOS;
-import org.opencadc.vospace.VOSURI;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import org.opencadc.storage.PathUtils;
+import org.opencadc.vospace.Node;
+import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.client.VOSpaceClient;
 
 public class VOSpaceServiceConfig {
@@ -112,6 +111,15 @@ public class VOSpaceServiceConfig {
         this.homeDir = "/";
     }
 
+    public static URI getGroupURI(final String groupName) {
+        return URI.create(VOSpaceServiceConfig.getGMSServiceURI() + "?" + groupName);
+    }
+
+    public static URI getGMSServiceURI() {
+        final LocalAuthority localAuthority = new LocalAuthority();
+        return localAuthority.getServiceURI(Standards.GMS_SEARCH_10.toASCIIString());
+    }
+
     public String getName() {
         return this.name;
     }
@@ -144,22 +152,13 @@ public class VOSpaceServiceConfig {
         return toURI(path.toString());
     }
 
-    public VOSURI toURI(final String path) throws URISyntaxException {
-        return new VOSURI(new URI(this.nodeResourceID + PathUtils.ensureSlashPrepended(path)));
-    }
-
     public VOSURI toURI(final Node node) throws URISyntaxException {
         final Path path = PathUtils.toPath(node);
         return toURI(path.toString());
     }
 
-    public static URI getGroupURI(final String groupName) {
-        return URI.create(VOSpaceServiceConfig.getGMSServiceURI() + "?" + groupName);
-    }
-
-    public static URI getGMSServiceURI() {
-        final LocalAuthority localAuthority = new LocalAuthority();
-        return localAuthority.getServiceURI(Standards.GMS_SEARCH_10.toASCIIString());
+    public VOSURI toURI(final String path) throws URISyntaxException {
+        return new VOSURI(new URI(this.nodeResourceID + PathUtils.ensureSlashPrepended(path)));
     }
 
     public VOSpaceClient getVOSpaceClient() {
@@ -180,8 +179,7 @@ public class VOSpaceServiceConfig {
 
         }
 
-        Features(boolean supportsBatchDownloads, boolean supportsBatchUploads, boolean supportsExternalLinks,
-                 boolean supportsPaging) {
+        Features(boolean supportsBatchDownloads, boolean supportsBatchUploads, boolean supportsExternalLinks, boolean supportsPaging) {
             this.supportsBatchDownloads = supportsBatchDownloads;
             this.supportsBatchUploads = supportsBatchUploads;
             this.supportsExternalLinks = supportsExternalLinks;
