@@ -101,4 +101,16 @@ public class PathUtils {
             return Paths.get(File.separator + pathElements[0]);
         }
     }
+
+    public static Path ensureSlashPrepended(final Path path) {
+        if (path.getRoot() == null) {
+            return Path.of("/" + path);
+        } else {
+            return path;
+        }
+    }
+
+    public static String ensureSlashPrepended(final String stringPath) {
+        return net.canfar.storage.PathUtils.ensureSlashPrepended(Path.of(stringPath)).toString();
+    }
 }
