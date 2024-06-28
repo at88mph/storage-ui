@@ -67,6 +67,7 @@
  */
 package net.canfar.storage.web.resources;
 
+import java.net.URL;
 import net.canfar.storage.web.config.StorageConfiguration;
 import net.canfar.storage.web.restlet.JSONRepresentation;
 import ca.nrc.cadc.reg.client.RegistryClient;
@@ -110,7 +111,7 @@ public class GroupNameServerResourceTest extends AbstractServerResourceTest<Grou
             }
 
             @Override
-            Subject getCurrentSubject() {
+            Subject getCallingSubject(final URL target) {
                 return new Subject();
             }
 

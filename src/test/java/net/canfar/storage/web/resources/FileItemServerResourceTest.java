@@ -150,7 +150,7 @@ public class FileItemServerResourceTest extends AbstractServerResourceTest<FileI
             }
 
             @Override
-            Subject getCurrentSubject() {
+            Subject getVOSpaceCallingSubject() {
                 return testUser;
             }
 

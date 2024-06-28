@@ -164,7 +164,7 @@ public class FileItemServerResource extends StorageItemServerResource {
     }
 
     void download(final DataNode dataNode) throws Exception {
-        final Subject subject = getCurrentSubject();
+        final Subject subject = getVOSpaceCallingSubject();
         final VOSURI dataNodeVOSURI = toURI(dataNode);
         final AuthMethod authMethod = AuthenticationUtil.getAuthMethodFromCredentials(subject);
         final URL baseURL = lookupDownloadEndpoint(dataNodeVOSURI.getServiceURI(), authMethod);
