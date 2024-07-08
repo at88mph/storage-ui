@@ -96,7 +96,7 @@ public class PageServerResource extends StorageItemServerResource {
                                 : null;
         final Integer pageSize = StringUtil.hasLength(pageSizeParameterValue) ? Integer.parseInt(pageSizeParameterValue)
                                                                               : null;
-        final Subject currentSubject = getCurrentSubject();
+        final Subject currentSubject = getVOSpaceCallingSubject();
 
         return new WriterRepresentation(MediaType.TEXT_CSV) {
             @Override

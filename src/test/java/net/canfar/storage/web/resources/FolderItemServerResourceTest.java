@@ -131,7 +131,7 @@ public class FolderItemServerResourceTest extends AbstractServerResourceTest<Fol
             }
 
             @Override
-            Subject getCurrentSubject() {
+            Subject getVOSpaceCallingSubject() {
                 return new Subject();
             }
 
@@ -333,7 +333,7 @@ public class FolderItemServerResourceTest extends AbstractServerResourceTest<Fol
             }
 
             @Override
-            Subject getCurrentSubject() {
+            Subject getVOSpaceCallingSubject() {
                 return new Subject();
             }
 

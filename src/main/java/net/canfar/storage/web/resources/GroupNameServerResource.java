@@ -69,6 +69,10 @@
 
 package net.canfar.storage.web.resources;
 
+import ca.nrc.cadc.auth.AuthMethod;
+import ca.nrc.cadc.reg.Standards;
+import ca.nrc.cadc.reg.client.RegistryClient;
+import java.net.URL;
 import net.canfar.storage.web.config.StorageConfiguration;
 import net.canfar.storage.web.restlet.JSONRepresentation;
 
@@ -102,13 +106,11 @@ public class GroupNameServerResource extends SecureServerResource {
 
     @Get("json")
     public Representation getGroupNames() throws Exception {
-        final Subject voSpaceUser = getCurrentSubject();
-
         return new JSONRepresentation() {
             @Override
             public void write(final JSONWriter writer) throws JSONException {
                 try {
-                    final List<String> groupNames = queryGroupNames(voSpaceUser);
+                    final List<String> groupNames = queryGroupNames();
 
                     Collections.sort(groupNames);
 
@@ -120,13 +122,19 @@ public class GroupNameServerResource extends SecureServerResource {
                     writer.endArray();
                 } catch (PrivilegedActionException e) {
                     throw new JSONException(e.getException());
+                } catch (Exception e) {
+                    // This will likely come from the token store, which the user would not have control over.
+                    throw new RuntimeException(e.getMessage(), e);
                 }
             }
         };
     }
 
-    final List<String> queryGroupNames(final Subject voSpaceUser) throws PrivilegedActionException {
-        return Subject.doAs(voSpaceUser, (PrivilegedExceptionAction<List<String>>) () -> {
+    final List<String> queryGroupNames() throws Exception {
+        final RegistryClient registryClient = getRegistryClient();
+        final URL gmsServiceURL = registryClient.getServiceURL(storageConfiguration.getGMSServiceURI(), Standards.GMS_SEARCH_10, AuthMethod.TOKEN);
+        final Subject gmsCallingSubject = getCallingSubject(gmsServiceURL);
+        return Subject.doAs(gmsCallingSubject, (PrivilegedExceptionAction<List<String>>) () -> {
             if (storageConfiguration.isOIDCConfigured()) {
                 LOGGER.debug("Getting only Group Names that user is a member of.");
                 final IvoaGroupClient ivoaGroupClient = getIvoaGroupClient();

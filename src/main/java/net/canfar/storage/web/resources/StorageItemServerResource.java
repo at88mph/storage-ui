@@ -68,21 +68,43 @@
 
 package net.canfar.storage.web.resources;
 
+import ca.nrc.cadc.auth.AuthenticationUtil;
+import ca.nrc.cadc.auth.IdentityManager;
 import ca.nrc.cadc.auth.NotAuthenticatedException;
 import ca.nrc.cadc.net.RemoteServiceException;
 import ca.nrc.cadc.util.StringUtil;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import javax.security.auth.Subject;
+import javax.servlet.ServletContext;
 import net.canfar.storage.PathUtils;
-import net.canfar.storage.web.config.StorageConfiguration;
-import net.canfar.storage.web.config.VOSpaceServiceConfigManager;
-import org.opencadc.gms.GroupURI;
-import org.opencadc.vospace.*;
-import org.opencadc.vospace.client.VOSpaceClient;
 import net.canfar.storage.web.StorageItemFactory;
+import net.canfar.storage.web.config.StorageConfiguration;
 import net.canfar.storage.web.config.VOSpaceServiceConfig;
+import net.canfar.storage.web.config.VOSpaceServiceConfigManager;
 import net.canfar.storage.web.restlet.StorageApplication;
 import net.canfar.storage.web.view.StorageItem;
-
 import org.json.JSONObject;
+import org.opencadc.gms.GroupURI;
+import org.opencadc.vospace.ContainerNode;
+import org.opencadc.vospace.LinkNode;
+import org.opencadc.vospace.Node;
+import org.opencadc.vospace.NodeNotFoundException;
+import org.opencadc.vospace.NodeProperty;
+import org.opencadc.vospace.VOS;
+import org.opencadc.vospace.VOSURI;
+import org.opencadc.vospace.client.VOSpaceClient;
 import org.opencadc.vospace.client.async.RecursiveSetNode;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -90,29 +112,14 @@ import org.restlet.resource.Delete;
 import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 
-import javax.security.auth.Subject;
-import javax.servlet.ServletContext;
-import java.io.*;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.security.*;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-
 
 public class StorageItemServerResource extends SecureServerResource {
     // Page size for the initial page display.
     private static final int DEFAULT_DISPLAY_PAGE_SIZE = 35;
+    private final VOSpaceServiceConfigManager voSpaceServiceConfigManager;
     StorageItemFactory storageItemFactory;
     VOSpaceClient voSpaceClient;
-
     VOSpaceServiceConfig currentService;
-    private final VOSpaceServiceConfigManager voSpaceServiceConfigManager;
 
     /**
      * Empty constructor needed for Restlet to manage it.  Needs to be public.
@@ -123,11 +130,12 @@ public class StorageItemServerResource extends SecureServerResource {
 
     /**
      * Only used for testing as no Request is coming through to initialize it as it would in Production.
-     * @param storageConfiguration          The StorageConfiguration object.
-     * @param voSpaceServiceConfigManager   The VOSpaceServiceConfigManager object.
-     * @param storageItemFactory            The StorageItemFactory object.
-     * @param voSpaceClient                 The VOSpaceClient object.
-     * @param serviceConfig                 The current VOSpace Service.
+     *
+     * @param storageConfiguration        The StorageConfiguration object.
+     * @param voSpaceServiceConfigManager The VOSpaceServiceConfigManager object.
+     * @param storageItemFactory          The StorageItemFactory object.
+     * @param voSpaceClient               The VOSpaceClient object.
+     * @param serviceConfig               The current VOSpace Service.
      */
     StorageItemServerResource(StorageConfiguration storageConfiguration,
                               VOSpaceServiceConfigManager voSpaceServiceConfigManager,
@@ -156,7 +164,7 @@ public class StorageItemServerResource extends SecureServerResource {
     /**
      * Set-up method.  This ensures there is a context first before pulling
      * out some necessary objects for further work.
-     * <p>
+     * <p></p>
      * Tester
      */
     @Override
@@ -170,12 +178,12 @@ public class StorageItemServerResource extends SecureServerResource {
     private void initializeStorageItemFactory() {
         final ServletContext servletContext = getServletContext();
         this.storageItemFactory = new StorageItemFactory((servletContext == null)
-                                                         ? StorageApplication.DEFAULT_CONTEXT_PATH
-                                                         : servletContext.getContextPath(),
+                                                             ? StorageApplication.DEFAULT_CONTEXT_PATH
+                                                             : servletContext.getContextPath(),
                                                          this.currentService);
     }
 
-    Path getCurrentPath()  {
+    Path getCurrentPath() {
         if (getRequestAttributes().containsKey("path")) {
             final String pathInRequest = getRequestAttribute("path");
             return Paths.get(pathInRequest);
@@ -226,7 +234,7 @@ public class StorageItemServerResource extends SecureServerResource {
 
     @SuppressWarnings("unchecked")
     <T extends Node> T getNode(final Path nodePath, final VOS.Detail detail, final Integer limit)
-            throws ResourceException {
+        throws ResourceException {
         final Map<String, Object> queryPayload = new HashMap<>();
         if (limit != null) {
             queryPayload.put("limit", limit);
@@ -340,7 +348,7 @@ public class StorageItemServerResource extends SecureServerResource {
      * Resolve this link Node's target to its final destination.  This method
      * will follow the target of the provided LinkNode, and continue to do so
      * until an external URL is found, or Node that is not a Link Node.
-     * <p>
+     * <p></p>
      * Finally, this method will redirect to the appropriate endpoint.
      *
      * @throws Exception For any parsing errors.
@@ -356,7 +364,6 @@ public class StorageItemServerResource extends SecureServerResource {
      *
      * @param linkNode The LinkNode to resolve.
      * @return URI of the target.
-     *
      * @throws NodeNotFoundException If the target is not found.
      */
     private URI resolveLink(final LinkNode linkNode) throws NodeNotFoundException {
@@ -399,7 +406,7 @@ public class StorageItemServerResource extends SecureServerResource {
      */
     private void setNodeRecursiveSecure(final Node newNode) throws Exception {
         try {
-            Subject.doAs(getCurrentSubject(), (PrivilegedExceptionAction<Void>) () -> {
+            Subject.doAs(getVOSpaceCallingSubject(), (PrivilegedExceptionAction<Void>) () -> {
                 final RecursiveSetNode rj = voSpaceClient.createRecursiveSetNode(toURI(newNode), newNode);
 
                 // Fire & forget is 'false'. 'true' will mean the run job does not return until it's finished.
@@ -459,7 +466,7 @@ public class StorageItemServerResource extends SecureServerResource {
 
     <T> T executeSecurely(final PrivilegedExceptionAction<T> runnable) throws Exception {
         try {
-            return executeSecurely(getCurrentSubject(), runnable);
+            return executeSecurely(getVOSpaceCallingSubject(), runnable);
         } catch (PrivilegedActionException e) {
             throw e.getException();
         }
@@ -471,6 +478,20 @@ public class StorageItemServerResource extends SecureServerResource {
         } catch (PrivilegedActionException e) {
             throw e.getException();
         }
+    }
+
+    String getDisplayName() throws Exception {
+        final IdentityManager identityManager = AuthenticationUtil.getIdentityManager();
+        return identityManager.toDisplayString(getVOSpaceCallingSubject());
+    }
+
+    /**
+     * Convenience method to obtain a Subject targeted for the current VOSpace backend.  When using Tokens, for example, the AuthenticationToken instance
+     * in the Subject's Public Credentials will contain the domain of the backend VOSpace API.
+     * @return  Subject instance.  Never null.
+     */
+    Subject getVOSpaceCallingSubject() throws Exception {
+        return super.getCallingSubject(new URL(this.voSpaceClient.getBaseURL()));
     }
 
     @Delete
@@ -499,7 +520,7 @@ public class StorageItemServerResource extends SecureServerResource {
         currentNode.getReadOnlyGroup().clear();
         if (keySet.contains("readGroup") && StringUtil.hasText(jsonObject.getString("readGroup"))) {
             final GroupURI newReadGroupURI =
-                    new GroupURI(storageConfiguration.getGroupURI(jsonObject.getString("readGroup")));
+                new GroupURI(storageConfiguration.getGroupURI(jsonObject.getString("readGroup")));
             currentNode.getReadOnlyGroup().add(newReadGroupURI);
         } else {
             currentNode.clearReadOnlyGroups = true;
@@ -508,7 +529,7 @@ public class StorageItemServerResource extends SecureServerResource {
         currentNode.getReadWriteGroup().clear();
         if (keySet.contains("writeGroup") && StringUtil.hasText(jsonObject.getString("writeGroup"))) {
             final GroupURI newReadWriteGroupURI =
-                    new GroupURI(storageConfiguration.getGroupURI(jsonObject.getString("writeGroup")));
+                new GroupURI(storageConfiguration.getGroupURI(jsonObject.getString("writeGroup")));
             currentNode.getReadWriteGroup().add(newReadWriteGroupURI);
         } else {
             currentNode.clearReadWriteGroups = true;
