@@ -97,7 +97,7 @@ public class PostAction extends StorageAction {
     }
 
     private void handleFolder() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getVOSpaceCallingSubject(), getStorageItemFactory());
         final JSONObject payload = (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY);
         if (payload == null) {
             throw new IllegalArgumentException("No payload passed in.");
@@ -116,7 +116,7 @@ public class PostAction extends StorageAction {
     }
 
     private void handleItem() throws Exception {
-        final StorageHandler storageHandler = new StorageHandler(this.currentService, getCurrentSubject());
+        final StorageHandler storageHandler = new StorageHandler(this.currentService, getVOSpaceCallingSubject());
         final boolean isRecursiveSet = storageHandler.updatePermissions(getCurrentPath(),
                                                                         (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY));
         this.syncOutput.setCode(isRecursiveSet ? HttpServletResponse.SC_ACCEPTED : HttpServletResponse.SC_OK);

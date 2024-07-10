@@ -96,7 +96,7 @@ public class PutAction extends StorageAction {
     }
 
     private void handleFile() throws Exception {
-        final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
+        final FileHandler fileHandler = new FileHandler(this.currentService, getVOSpaceCallingSubject());
         final boolean isInheritPermissions = this.syncInput.getContent("inheritPermissionsCheckBox") != null;
         for (final String contentName : this.syncInput.getContentNames()) {
             final Object contentValue = this.syncInput.getContent(contentName);
@@ -111,7 +111,7 @@ public class PutAction extends StorageAction {
     }
 
     private void handleLink() throws Exception {
-        final LinkHandler linkHandler = new LinkHandler(this.currentService, getCurrentSubject());
+        final LinkHandler linkHandler = new LinkHandler(this.currentService, getVOSpaceCallingSubject());
         linkHandler.create(getCurrentPath(), (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY));
         this.syncOutput.setCode(HttpServletResponse.SC_CREATED);
     }

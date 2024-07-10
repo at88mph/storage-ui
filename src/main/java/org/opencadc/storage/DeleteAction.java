@@ -74,7 +74,7 @@ import javax.security.auth.Subject;
 public class DeleteAction extends StorageAction {
     @Override
     public void doAction() throws Exception {
-        Subject.doAs(getCurrentSubject(), (PrivilegedExceptionAction<Void>) () -> {
+        Subject.doAs(getVOSpaceCallingSubject(), (PrivilegedExceptionAction<Void>) () -> {
             getVOSpaceClient().deleteNode(getCurrentPath().toString());
             return null;
         });

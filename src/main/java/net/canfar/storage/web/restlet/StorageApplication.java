@@ -165,7 +165,7 @@ public class StorageApplication extends Application {
         final TemplateRoute oidcCallbackRoute = router.attach(contextPath + "/oidc-callback",
                                                               OIDCCallbackServerResource.class);
         final TemplateRoute oidcLoginRoute = router.attach(contextPath + "/oidc-login",
-                                                              OIDCLoginServerResource.class);
+                                                           OIDCLoginServerResource.class);
 
         itemRoute.getTemplate().getVariables().putAll(routeVariables);
         folderRoute.getTemplate().getVariables().putAll(routeVariables);

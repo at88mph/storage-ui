@@ -231,11 +231,16 @@ public abstract class StorageAction extends RestAction {
         return this.storageConfiguration.getOIDCClient();
     }
 
-    protected Subject getCurrentSubject() throws Exception {
-        return getCurrentSubject(new URL(getVOSpaceClient().getBaseURL()));
+    /**
+     * Convenience method to obtain a Subject targeted for the current VOSpace backend.  When using Tokens, for example, the AuthenticationToken instance
+     * in the Subject's Public Credentials will contain the domain of the backend VOSpace API.
+     * @return  Subject instance.  Never null.
+     */
+    Subject getVOSpaceCallingSubject() throws Exception {
+        return getCallingSubject(new URL(this.getVOSpaceClient().getBaseURL()));
     }
 
-    protected Subject getCurrentSubject(final URL targetURL) throws Exception {
+    protected Subject getCallingSubject(final URL targetURL) throws Exception {
         final String rawCookieHeader = this.syncInput.getHeader("cookie");
         final Subject subject = AuthenticationUtil.getCurrentSubject();
 
@@ -274,7 +279,7 @@ public abstract class StorageAction extends RestAction {
 
     protected String getDisplayName() throws Exception {
         final IdentityManager identityManager = AuthenticationUtil.getIdentityManager();
-        return identityManager.toDisplayString(getCurrentSubject());
+        return identityManager.toDisplayString(getVOSpaceCallingSubject());
     }
 
     void redirectDefaultService() {

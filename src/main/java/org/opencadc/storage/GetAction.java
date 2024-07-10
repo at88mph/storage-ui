@@ -121,23 +121,23 @@ public class GetAction extends StorageAction {
     }
 
     void handleFolder() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getVOSpaceCallingSubject(), getStorageItemFactory());
         final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
         folderHandler.writeQuota(getCurrentPath(), writer);
     }
 
     void handleLink() throws Exception {
-        final LinkHandler linkHandler = new LinkHandler(this.currentService, getCurrentSubject());
+        final LinkHandler linkHandler = new LinkHandler(this.currentService, getVOSpaceCallingSubject());
         redirectSeeOther(linkHandler.resolve(getCurrentPath(), getStorageItemFactory()).toString());
     }
 
     void handleFile() throws Exception {
-        final FileHandler fileHandler = new FileHandler(this.currentService, getCurrentSubject());
+        final FileHandler fileHandler = new FileHandler(this.currentService, getVOSpaceCallingSubject());
         redirectSeeOther(fileHandler.getDownloadEndpoint(getCurrentPath()));
     }
 
     void handleList() throws Exception {
-        final FolderHandler folderHandler = new FolderHandler(this.currentService, getCurrentSubject(), getStorageItemFactory());
+        final FolderHandler folderHandler = new FolderHandler(this.currentService, getVOSpaceCallingSubject(), getStorageItemFactory());
         final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
         folderHandler.writePage(getCurrentPath(), null, getVOSpaceServiceList(), getDisplayName(),
                                 this.storageConfiguration.getFreeMarkerConfiguration(this.syncInput.getContextPath()), writer);
@@ -150,7 +150,7 @@ public class GetAction extends StorageAction {
         final Integer pageSize = StringUtil.hasLength(pageSizeParameterValue) ? Integer.parseInt(pageSizeParameterValue) : null;
         final Writer writer = new OutputStreamWriter(this.syncOutput.getOutputStream());
 
-        final PageHandler pageHandler = new PageHandler(this.currentService, getCurrentSubject(), this.currentService.toURI(getCurrentPath()), startURI);
+        final PageHandler pageHandler = new PageHandler(this.currentService, getVOSpaceCallingSubject(), this.currentService.toURI(getCurrentPath()), startURI);
         pageHandler.writePage(writer, getStorageItemFactory(), pageSize);
     }
 
