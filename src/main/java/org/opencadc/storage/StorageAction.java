@@ -77,7 +77,7 @@ import ca.nrc.cadc.rest.InlineContentHandler;
 import ca.nrc.cadc.rest.RestAction;
 import ca.nrc.cadc.util.StringUtil;
 import java.io.IOException;
-import java.net.URI;
+import java.net.URL;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
@@ -181,15 +181,7 @@ public abstract class StorageAction extends RestAction {
         final int requestPathElementNameCount = path.getNameCount();
         if (requestPathElementNameCount > 1) {
             final String firstRequestPathElement = path.getName(1).toString().toLowerCase();
-            final StorageItemContext[] matchingStorageItemContexts =
-                Arrays.stream(StorageItemContext.values()).filter(storageItemContext -> storageItemContext.endpoint.equals(firstRequestPathElement))
-                      .toArray(StorageItemContext[]::new);
-
-            if (matchingStorageItemContexts.length > 0) {
-                return matchingStorageItemContexts[0];
-            } else {
-                return null;
-            }
+            return StorageItemContext.fromEndpoint(firstRequestPathElement);
         } else {
             return null;
         }
@@ -202,17 +194,18 @@ public abstract class StorageAction extends RestAction {
         final String voSpaceService = servicePath.getName(0).toString();
         if (StringUtil.hasText(voSpaceService)) {
             final String lowerServiceName = voSpaceService.toLowerCase();
-            final StorageItemContext[] storageItemContexts =
-                Arrays.stream(StorageItemContext.values()).filter(storageItemContext -> storageItemContext.endpoint.equals(lowerServiceName))
-                      .toArray(StorageItemContext[]::new);
-            // Special case if the service name is actually a verb.
-            if (storageItemContexts.length > 0) {
-                ret = null;
-            } else if (getVOSpaceServiceList().contains(lowerServiceName)) {
-                ret = voSpaceService;
-            } else {
-                String errMsg = "service not found in storage-ui configuration: " + voSpaceService;
-                throw new IllegalArgumentException(errMsg);
+            try {
+                // Special case if the service name is actually a verb.
+                StorageItemContext.fromEndpoint(lowerServiceName);
+
+                if (getVOSpaceServiceList().contains(lowerServiceName)) {
+                    ret = voSpaceService;
+                } else {
+                    String errMsg = "service not found in storage-ui configuration: " + voSpaceService;
+                    throw new IllegalArgumentException(errMsg);
+                }
+            } catch (NoSuchElementException noSuchElementException) {
+                return null;
             }
         } else {
             // no svc parameter found - return the current default
@@ -239,6 +232,10 @@ public abstract class StorageAction extends RestAction {
     }
 
     protected Subject getCurrentSubject() throws Exception {
+        return getCurrentSubject(new URL(getVOSpaceClient().getBaseURL()));
+    }
+
+    protected Subject getCurrentSubject(final URL targetURL) throws Exception {
         final String rawCookieHeader = this.syncInput.getHeader("cookie");
         final Subject subject = AuthenticationUtil.getCurrentSubject();
 
@@ -258,7 +255,7 @@ public abstract class StorageAction extends RestAction {
                         subject.getPrincipals().add(new AuthorizationTokenPrincipal(AuthenticationUtil.AUTHORIZATION_HEADER,
                                                                                     AuthenticationUtil.CHALLENGE_TYPE_BEARER + " " + accessToken));
                         subject.getPublicCredentials().add(new AuthorizationToken(AuthenticationUtil.CHALLENGE_TYPE_BEARER, accessToken,
-                                                                                  Collections.singletonList(URI.create(syncInput.getRequestURI()).getHost())));
+                                                                                  Collections.singletonList(targetURL.getHost())));
                     } catch (NoSuchElementException noTokenForKeyInCacheException) {
                         LOGGER.warn("Cookie found and decrypted but no value in cache.  Ignoring cookie...");
                     }
@@ -298,6 +295,7 @@ public abstract class StorageAction extends RestAction {
     enum StorageItemContext {
         FILE("file"),
         FOLDER("folder"),
+        GROUPS("groups"),
         ITEM("item"),
         LINK("link"),
         LIST("list"),
@@ -311,6 +309,13 @@ public abstract class StorageAction extends RestAction {
 
         StorageItemContext(String name) {
             this.endpoint = name;
+        }
+
+        static StorageItemContext fromEndpoint(final String endpoint) {
+            return Arrays.stream(StorageItemContext.values())
+                         .filter(storageItemContext -> storageItemContext.endpoint.equalsIgnoreCase(endpoint))
+                         .findFirst()
+                         .orElseThrow(NoSuchElementException::new);
         }
     }
 }
