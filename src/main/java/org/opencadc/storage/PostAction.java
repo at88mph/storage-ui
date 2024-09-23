@@ -72,8 +72,8 @@ import ca.nrc.cadc.rest.InlineContentHandler;
 import java.nio.file.Path;
 import javax.servlet.http.HttpServletResponse;
 import org.json.JSONObject;
-
 import org.opencadc.storage.node.FolderHandler;
+import org.opencadc.storage.node.PackageHandler;
 import org.opencadc.storage.node.StorageHandler;
 import org.opencadc.vospace.ContainerNode;
 
@@ -89,6 +89,9 @@ public class PostAction extends StorageAction {
                 break;
             case ITEM:
                 handleItem();
+                break;
+            case PKG:
+                handlePackage();
                 break;
             default: {
                 throw new UnsupportedOperationException("No POST supported for " + storageItemType);
@@ -120,6 +123,11 @@ public class PostAction extends StorageAction {
         final boolean isRecursiveSet = storageHandler.updatePermissions(getCurrentPath(),
                                                                         (JSONObject) this.syncInput.getContent(JSONInlineContentHandler.PAYLOAD_KEY));
         this.syncOutput.setCode(isRecursiveSet ? HttpServletResponse.SC_ACCEPTED : HttpServletResponse.SC_OK);
+    }
+
+    private void handlePackage() throws Exception {
+        final PackageHandler packageHandler = new PackageHandler(this.currentService, getVOSpaceCallingSubject());
+
     }
 
     @Override

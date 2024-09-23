@@ -2419,141 +2419,19 @@ function fileManager(
     return isDeleted
   }
 
-  /**
-   * Prompts for confirmation, then deletes the items.
-   * Called by clicking the "Delete" button after selecting items.
-   *
-   * @param paths     Array of paths to delete.
-   * @returns {boolean}
-   */
-  var downloadItems = function(paths) {
-    var isDeleted = false
-
-    var deleteCount = paths.length
-    var successful = []
-    var unsuccessful = {}
-    var totalCompleteCount = 0
-
-    var doDelete = function() {
-      for (var p = 0; p < deleteCount; p++) {
-        var path = paths[p]
-
-        $.ajax({
-          type: 'DELETE',
-          url: contextPath + vospaceServicePath + config.options.itemConnector + path,
-          async: false,
-          success: function( data, textStatus, jqXHR) {
-            successful.push(path)
-          },
-          error: function(jqXHR, textStatus, errorThrown) {
-            var errMsg = ''
-
-            // This switch doesn't use getErrorMsg() because it's
-            // message set is too different
-            switch (jqXHR.status) {
-              case 401:
-              case 403:
-                unsuccessful[path] = lg.ERROR_WRITING_PERM
-                break
-              case 404:
-                unsuccessful[path] = lg.ERROR_NO_SUCH_ITEM
-                break
-              case 500:
-                errMsg = unsuccessful[path] = lg.ERROR_SERVER + ': ' + errorThrown
-              default:
-                errMsg = lg.unknown_error
-            }
-            $.prompt(errMsg + ' (' + jqXHR.status + ')')
-          }
-        }).always(function() {
-          totalCompleteCount++
-        })
-      }
-
-      while (totalCompleteCount < deleteCount) {
-        // Wait
-      }
-
-      return $.isEmptyObject(unsuccessful)
-    }
-
-    var btns = []
-    btns.push({
-      title: lg.yes,
-      value: true,
-      classes: 'btn btn-danger'
-    })
-    btns.push({
-      title: lg.no,
-      value: false,
-      classes: 'btn btn-default'
-    })
-
-    if (deleteCount > 0) {
-      $.prompt.disableStateButtons('deletion')
-
-      $.prompt({
-        confirmation: {
-          html: msg,
-          buttons: btns,
-          submit: function(e, v, m, f) {
-            if (v === true) {
-              e.preventDefault()
-              $.prompt.nextState(function(event) {
-                event.preventDefault()
-                var nextState = doDelete(event) ? 'successful' : 'unsuccessful'
-                $.prompt.goToState(nextState)
-                return false
-              })
-              return false
-            } else {
-              $.prompt.close()
-            }
-          }
-        },
-        deletion: {
-          html: lg.deleting_message.replace('%d', deleteCount)
-        },
-        successful: {
-          html: lg.successful_delete,
-          buttons: [
-            {
-              title: lg.close,
-              value: false,
-              classes: 'btn btn-success'
-            }
-          ],
-          submit: refreshPage
-        },
-        unsuccessful: {
-          html: function() {
-            var output = ''
-
-            $.each(unsuccessful, function(path, error) {
-              output += path + ': ' + error + '<br />'
-            })
-
-            return lg.unsuccessful_delete + '<br />' + output
-          }
-        }
-      })
-    }
-
-    return isDeleted
-  }
-
   $(document).on('click', '.download-dropdown-menu > li > a', function() {
     var $thisLink = $(this)
+    const downloadMethod = config.download.methods[$thisLink.attr('class')]
 
     // ZIP file is disabled for now
     // 2023.05.10
     // jenkinsd
     //
-    if ($thisLink.attr('class') === 'download-zip-file') {
+    if (downloadMethod.id === 'download-zip-file' || downloadMethod.id === 'download-tar-file') {
 
       var postData = {}
-      postData.responseformat = 'application/zip'
-      var targetList = new Array();
+      postData.responseformat = downloadMethod.responseFormat
+      const targetList = [];
 
       $.each(
         $dt
@@ -2576,10 +2454,8 @@ function fileManager(
           config.options.packageConnector,
         data: JSON.stringify(postData),
         contentType: 'application/json',
-        success: function (data, textStatus, jqXHR) {
-          var infoMsg = data.msg;
-
-          var $anchor = $('<a/>')
+        success: function (data, _textStatus, _jqXHR) {
+          const $anchor = $('<a/>')
             .attr('href', data.endpoint)
             .attr('display', 'none')
 
@@ -2597,7 +2473,7 @@ function fileManager(
 
         },
         error: function (jqXHR, textStatus, errorThrown) {
-          var errMsg = ''
+          let errMsg = ''
 
           switch (jqXHR.status) {
             default:
@@ -2608,7 +2484,6 @@ function fileManager(
       })
 
     } else {
-      var downloadMethod = config.download.methods[$thisLink.attr('class')]
       var form = document.createElement('form')
       var formAction = '/downloadManager/download'
       form.setAttribute('method', 'POST')

@@ -17,7 +17,6 @@
             <param-name>logLevelPackages</param-name>
             <param-value>
                 ca.nrc.cadc.vos
-                net.canfar
                 org.opencadc.storage
                 org.opencadc.token
                 org.opencadc.vospace

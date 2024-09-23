@@ -69,7 +69,6 @@ package org.opencadc.storage.config;
 
 import ca.nrc.cadc.net.ResourceNotFoundException;
 import org.apache.log4j.Logger;
-import org.opencadc.storage.NoSuchConfigurationException;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -176,14 +175,14 @@ public class VOSpaceServiceConfigManager {
     }
 
     VOSpaceServiceConfig.Features getFeatures(final String storageServiceName) {
-        final VOSpaceServiceConfig.Features features = new VOSpaceServiceConfig.Features();
+        final VOSpaceServiceConfig.Features features = VOSpaceServiceConfig.Features.create();
 
         final String supportsBatchDownloadProperty =
                 String.format(VOSpaceServiceConfigManager.SERVICE_FEATURE_BATCH_DOWNLOAD_PROPERTY_KEY_FORMAT,
                               VOSpaceServiceConfigManager.KEY_BASE, storageServiceName);
         final boolean supportsBatchDownload = applicationConfiguration.lookupFlag(supportsBatchDownloadProperty, true);
         if (supportsBatchDownload) {
-            features.supportsBatchDownloads();
+            features.withBatchDownloads();
         }
 
         final String supportsBatchUploadProperty =
@@ -191,7 +190,7 @@ public class VOSpaceServiceConfigManager {
                               VOSpaceServiceConfigManager.KEY_BASE, storageServiceName);
         final boolean supportsBatchUpload = applicationConfiguration.lookupFlag(supportsBatchUploadProperty, true);
         if (supportsBatchUpload) {
-            features.supportsBatchUploads();
+            features.withBatchUploads();
         }
 
         final String supportsExternalLinksProperty =
@@ -199,7 +198,7 @@ public class VOSpaceServiceConfigManager {
                               VOSpaceServiceConfigManager.KEY_BASE, storageServiceName);
         final boolean supportsExternalLinks = applicationConfiguration.lookupFlag(supportsExternalLinksProperty, true);
         if (supportsExternalLinks) {
-            features.supportsExternalLinks();
+            features.withExternalLinks();
         }
 
         final String supportsPagingProperty =
@@ -207,7 +206,7 @@ public class VOSpaceServiceConfigManager {
                               VOSpaceServiceConfigManager.KEY_BASE, storageServiceName);
         final boolean supportsPaging = applicationConfiguration.lookupFlag(supportsPagingProperty, true);
         if (supportsPaging) {
-            features.supportsPaging();
+            features.withPaging();
         }
 
         return features;

@@ -102,7 +102,6 @@ import org.opencadc.vospace.VOS;
 import org.opencadc.vospace.VOSURI;
 import org.opencadc.vospace.View;
 import org.opencadc.vospace.client.ClientTransfer;
-
 import org.opencadc.vospace.client.VOSClientUtil;
 import org.opencadc.vospace.client.VOSpaceClient;
 import org.opencadc.vospace.client.async.RecursiveSetNode;
@@ -114,7 +113,7 @@ import org.opencadc.vospace.transfer.Transfer;
 
 public class FileHandler extends StorageHandler {
     private static final Logger LOGGER = Logger.getLogger(FileHandler.class);
-    private final static AuthMethod[] PROTOCOL_AUTH_METHODS = new AuthMethod[] {AuthMethod.ANON, AuthMethod.CERT, AuthMethod.COOKIE};
+    private static final AuthMethod[] PROTOCOL_AUTH_METHODS = new AuthMethod[] {AuthMethod.ANON, AuthMethod.CERT, AuthMethod.COOKIE};
     private static final int BUFFER_SIZE = 8192;
 
     private final UploadVerifier uploadVerifier = new UploadVerifier();
@@ -210,8 +209,9 @@ public class FileHandler extends StorageHandler {
 
     /**
      * Set permissions that should be inherited.
-     * @param nodePath  The path to set the permissions on.
-     * @throws Exception    If the node cannot be read or written to.
+     *
+     * @param nodePath The path to set the permissions on.
+     * @throws Exception If the node cannot be read or written to.
      */
     public void setInheritedPermissions(final Path nodePath) throws Exception {
         final Node newNode = getNode(nodePath, null);
@@ -313,7 +313,7 @@ public class FileHandler extends StorageHandler {
 
         throw new IllegalStateException(
             "Incomplete configuration in the registry.  No endpoint for " + serviceURI + " could be found from (" + Arrays.toString(downloadEndpointStandards)
-            + ")");
+                + ")");
     }
 
     private URL lookupDownloadEndpoint(final URI serviceURI, final URI capabilityStandardURI, final AuthMethod authMethod) {

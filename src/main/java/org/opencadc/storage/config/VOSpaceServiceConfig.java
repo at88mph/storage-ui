@@ -175,31 +175,32 @@ public class VOSpaceServiceConfig {
         private boolean supportsExternalLinks = false;
         private boolean supportsPaging = false;
 
-        public Features() {
+        public static Features create() {
+            return new Features();
+        }
+
+        private Features() {
 
         }
 
-        Features(boolean supportsBatchDownloads, boolean supportsBatchUploads, boolean supportsExternalLinks, boolean supportsPaging) {
-            this.supportsBatchDownloads = supportsBatchDownloads;
-            this.supportsBatchUploads = supportsBatchUploads;
-            this.supportsExternalLinks = supportsExternalLinks;
-            this.supportsPaging = supportsPaging;
-        }
-
-        public void supportsBatchDownloads() {
+        public Features withBatchDownloads() {
             this.supportsBatchDownloads = true;
+            return this;
         }
 
-        public void supportsBatchUploads() {
+        Features withBatchUploads() {
             this.supportsBatchUploads = true;
+            return this;
         }
 
-        public void supportsExternalLinks() {
+        Features withExternalLinks() {
             this.supportsExternalLinks = true;
+            return this;
         }
 
-        public void supportsPaging() {
+        Features withPaging() {
             this.supportsPaging = true;
+            return this;
         }
     }
 }

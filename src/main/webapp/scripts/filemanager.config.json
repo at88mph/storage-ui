@@ -85,9 +85,15 @@
             {
                 "id": "HTML List"
             },
-            "download-download-manager":
+            "download-zip-file":
             {
-                "id": "Java Webstart"
+                "id": "ZIP File",
+                "responseFormat": "application/zip"
+            },
+            "download-tar-file":
+            {
+                "id": "TAR File",
+                "responseFormat": "application/x-tar"
             }
         }
     },

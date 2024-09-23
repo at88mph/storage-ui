@@ -79,6 +79,7 @@ import org.opencadc.storage.config.StorageConfiguration;
 import org.opencadc.storage.node.FileHandler;
 import org.opencadc.storage.node.FolderHandler;
 import org.opencadc.storage.node.LinkHandler;
+import org.opencadc.storage.node.PackageHandler;
 import org.opencadc.storage.node.PageHandler;
 import org.opencadc.token.Client;
 import org.opencadc.vospace.VOSURI;

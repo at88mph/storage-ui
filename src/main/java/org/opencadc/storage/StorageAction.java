@@ -181,7 +181,11 @@ public abstract class StorageAction extends RestAction {
         final int requestPathElementNameCount = path.getNameCount();
         if (requestPathElementNameCount > 1) {
             final String firstRequestPathElement = path.getName(1).toString().toLowerCase();
-            return StorageItemContext.fromEndpoint(firstRequestPathElement);
+            try {
+                return StorageItemContext.fromEndpoint(firstRequestPathElement);
+            } catch (NoSuchElementException noSuchElementException) {
+                return null;
+            }
         } else {
             return null;
         }
@@ -205,7 +209,7 @@ public abstract class StorageAction extends RestAction {
                     throw new IllegalArgumentException(errMsg);
                 }
             } catch (NoSuchElementException noSuchElementException) {
-                return null;
+                return lowerServiceName;
             }
         } else {
             // no svc parameter found - return the current default
