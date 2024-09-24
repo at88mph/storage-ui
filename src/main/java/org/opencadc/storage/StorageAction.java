@@ -96,8 +96,9 @@ import org.opencadc.vospace.client.VOSpaceClient;
 public abstract class StorageAction extends RestAction {
 
     private static final Logger LOGGER = Logger.getLogger(StorageAction.class);
+
     final StorageConfiguration storageConfiguration;
-    private final VOSpaceServiceConfigManager voSpaceServiceConfigManager;
+    final VOSpaceServiceConfigManager voSpaceServiceConfigManager;
     VOSpaceServiceConfig currentService;
 
     /**
@@ -146,10 +147,6 @@ public abstract class StorageAction extends RestAction {
         return Path.of(this.syncInput.getPath());
     }
 
-    Path getRequestPath() {
-        return Path.of(this.syncInput.getRequestPath());
-    }
-
     StorageItemFactory getStorageItemFactory() {
         return new StorageItemFactory(this.syncInput.getContextPath(), this.currentService);
     }
@@ -160,63 +157,22 @@ public abstract class StorageAction extends RestAction {
      * @return StorageItemContext instance.  Never null.
      */
     StorageItemContext getStorageItemType() {
-        final Path requestPath = getRequestPath();
-        final StorageItemContext fromRequest = StorageAction.matchItemContext(requestPath);
+        final RequestPathParser requestPathParser = new RequestPathParser(this.syncInput.getRequestPath(), this.voSpaceServiceConfigManager);
 
-        if (fromRequest != null) {
-            return fromRequest;
-        }
-
-        final Path servicePath = getServicePath();
-        final StorageItemContext fromService = StorageAction.matchItemContext(servicePath);
-
-        if (fromService != null) {
-            return fromService;
-        }
-
-        throw new IllegalArgumentException("Request does not contain a valid storage item type verb: " + requestPath);
-    }
-
-    static StorageItemContext matchItemContext(final Path path) {
-        final int requestPathElementNameCount = path.getNameCount();
-        if (requestPathElementNameCount > 1) {
-            final String firstRequestPathElement = path.getName(1).toString().toLowerCase();
-            try {
-                return StorageItemContext.fromEndpoint(firstRequestPathElement);
-            } catch (NoSuchElementException noSuchElementException) {
-                return null;
-            }
-        } else {
-            return null;
-        }
+        return requestPathParser.getContextVerb();
     }
 
     String getCurrentVOSpaceService() {
         LOGGER.debug("getCurrentVOSpaceService");
-        final String ret;
-        final Path servicePath = getServicePath();
-        final String voSpaceService = servicePath.getName(0).toString();
-        if (StringUtil.hasText(voSpaceService)) {
-            final String lowerServiceName = voSpaceService.toLowerCase();
-            try {
-                // Special case if the service name is actually a verb.
-                StorageItemContext.fromEndpoint(lowerServiceName);
-
-                if (getVOSpaceServiceList().contains(lowerServiceName)) {
-                    ret = voSpaceService;
-                } else {
-                    String errMsg = "service not found in storage-ui configuration: " + voSpaceService;
-                    throw new IllegalArgumentException(errMsg);
-                }
-            } catch (NoSuchElementException noSuchElementException) {
-                return lowerServiceName;
-            }
+        final RequestPathParser requestPathParser = new RequestPathParser(this.syncInput.getRequestPath(), this.voSpaceServiceConfigManager);
+        final String voSpaceService = requestPathParser.getServiceName();
+        final String lowerServiceName = voSpaceService.toLowerCase();
+        if (getVOSpaceServiceList().contains(lowerServiceName)) {
+            return voSpaceService;
         } else {
-            // no svc parameter found - return the current default
-            ret = this.voSpaceServiceConfigManager.getDefaultServiceName();
+            String errMsg = "specified service not found in storage-ui configuration: " + voSpaceService;
+            throw new IllegalArgumentException(errMsg);
         }
-
-        return ret;
     }
 
     VOSpaceClient getVOSpaceClient() {
@@ -299,32 +255,5 @@ public abstract class StorageAction extends RestAction {
     void redirectTo(final int code, final String redirectURL) {
         this.syncOutput.setCode(code);
         this.syncOutput.setHeader("location", redirectURL);
-    }
-
-    enum StorageItemContext {
-        FILE("file"),
-        FOLDER("folder"),
-        GROUPS("groups"),
-        ITEM("item"),
-        LINK("link"),
-        LIST("list"),
-        RAW("raw"),
-        PAGE("page"),
-        PKG("pkg"),
-        OIDC_LOGIN("oidc-login"),
-        OIDC_CALLBACK("oidc-callback");
-
-        final String endpoint;
-
-        StorageItemContext(String name) {
-            this.endpoint = name;
-        }
-
-        static StorageItemContext fromEndpoint(final String endpoint) {
-            return Arrays.stream(StorageItemContext.values())
-                         .filter(storageItemContext -> storageItemContext.endpoint.equalsIgnoreCase(endpoint))
-                         .findFirst()
-                         .orElseThrow(NoSuchElementException::new);
-        }
     }
 }

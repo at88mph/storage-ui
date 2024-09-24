@@ -1,11 +1,12 @@
 package org.opencadc.storage;
 
+import ca.nrc.cadc.net.ResourceNotFoundException;
 import ca.nrc.cadc.util.StringUtil;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.NoSuchElementException;
-import org.opencadc.storage.config.VOSpaceServiceConfig;
+import org.opencadc.storage.config.VOSpaceServiceConfigManager;
+
 
 /**
  * Handles incoming path requests and provides "real" path translations.
@@ -23,13 +24,13 @@ import org.opencadc.storage.config.VOSpaceServiceConfig;
 public class RequestPathParser {
     private static final StorageItemContext DEFAULT_CONTEXT_VERB = StorageItemContext.LIST;
     private final Path requestPath;
-    private final VOSpaceServiceConfig defaultService;
+    private final VOSpaceServiceConfigManager voSpaceServiceConfigManager;
 
-    public RequestPathParser(String requestPath, VOSpaceServiceConfig defaultService) {
-        if (!StringUtil.hasText(requestPath)) {
+    public RequestPathParser(String requestPath, VOSpaceServiceConfigManager voSpaceServiceConfigManager) {
+        if (!StringUtil.hasText(requestPath) || Path.of(requestPath).getNameCount() == 0) {
             throw new IllegalStateException("Input requestPath cannot be null");
-        } else if (defaultService == null) {
-            throw new IllegalStateException("Default VOSpaceService is required.");
+        } else if (voSpaceServiceConfigManager == null) {
+            throw new IllegalStateException("VOSpaceServiceConfigManager instance is required.");
         }
 
         try {
@@ -38,7 +39,20 @@ public class RequestPathParser {
             throw new IllegalStateException(invalidPathException.getMessage(), invalidPathException);
         }
 
-        this.defaultService = defaultService;
+        this.voSpaceServiceConfigManager = voSpaceServiceConfigManager;
+    }
+
+
+    String getServiceName() {
+        return getRealPath().getName(1).toString();
+    }
+
+    StorageItemContext getContextVerb() {
+        return StorageItemContext.fromEndpoint(getRealPath().getName(2).toString());
+    }
+
+    Path getContextPath() {
+        return getRealPath().getName(0);
     }
 
     /**
@@ -47,41 +61,40 @@ public class RequestPathParser {
      */
     Path getRealPath() {
         final int pathElementCount = requestPath.getNameCount();
+        final String defaultServiceName = this.voSpaceServiceConfigManager.getDefaultServiceName();
         final Path realPath;
 
         if (pathElementCount == 2) {
-            realPath = Path.of("/" + requestPath.getName(0), this.defaultService.getName(), requestPath.getName(1).toString());
+            realPath = Path.of("/" + requestPath.getName(0), defaultServiceName, requestPath.getName(1).toString());
+        } else if (pathElementCount == 1) {
+            realPath = Path.of("/" + requestPath.getName(0), defaultServiceName, RequestPathParser.DEFAULT_CONTEXT_VERB.endpoint);
         } else {
-            realPath = requestPath;
+            realPath = ensureCurrentContext();
         }
 
         return realPath;
     }
 
-    enum StorageItemContext {
-        FILE("file"),
-        FOLDER("folder"),
-        GROUPS("groups"),
-        ITEM("item"),
-        LINK("link"),
-        LIST("list"),
-        RAW("raw"),
-        PAGE("page"),
-        PKG("pkg"),
-        OIDC_LOGIN("oidc-login"),
-        OIDC_CALLBACK("oidc-callback");
+    private Path ensureCurrentContext() {
+        // The first three items should consist of the servlet context, current service, and context verb.
+        final Path contextualPath = this.requestPath.subpath(0, 3);
+        final String serviceNameOrContextVerb = contextualPath.getName(1).toString();
 
-        final String endpoint;
+        try {
+            final StorageItemContext contextVerb = StorageItemContext.fromEndpoint(serviceNameOrContextVerb);
 
-        StorageItemContext(String name) {
-            this.endpoint = name;
+            // It's a verb, so inject the default service.
+            return Path.of("/" + contextualPath.getName(0), this.voSpaceServiceConfigManager.getDefaultServiceName(), contextVerb.endpoint,
+                           this.requestPath.subpath(2, this.requestPath.getNameCount()).toString());
+        } catch (NoSuchElementException notAVerb) {
+            // Assume the path is already setup in the format /<servlet context>/<service name>/<context verb>, so check the service name.
+            try {
+                this.voSpaceServiceConfigManager.getServiceConfig(serviceNameOrContextVerb);
+            } catch (ResourceNotFoundException resourceNotFoundException) {
+                throw new IllegalArgumentException("No such service: " + serviceNameOrContextVerb);
+            }
         }
 
-        static StorageAction.StorageItemContext fromEndpoint(final String endpoint) {
-            return Arrays.stream(StorageAction.StorageItemContext.values())
-                         .filter(storageItemContext -> storageItemContext.endpoint.equalsIgnoreCase(endpoint))
-                         .findFirst()
-                         .orElseThrow(NoSuchElementException::new);
-        }
+        return this.requestPath;
     }
 }

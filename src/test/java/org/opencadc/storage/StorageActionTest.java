@@ -68,33 +68,37 @@
 
 package org.opencadc.storage;
 
+import ca.nrc.cadc.rest.SyncInput;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import org.mockito.Mockito;
+import org.opencadc.storage.config.VOSpaceServiceConfigManager;
 
 public class StorageActionTest {
     @Test
     public void getCurrentService() {
-        final StorageAction storageAction = new StorageAction(null, null) {
+        final VOSpaceServiceConfigManager mockVOSpaceConfigManager = Mockito.mock(VOSpaceServiceConfigManager.class);
+        final SyncInput mockSyncInput = Mockito.mock(SyncInput.class);
+
+        final StorageAction storageAction = new StorageAction(null, mockVOSpaceConfigManager) {
             @Override
             public void doAction() {
                 // do nothing.
             }
-
-            @Override
-            Path getServicePath() {
-                return Path.of("myvo1/home/dune/first");
-            }
-
-            @Override
-            List<String> getVOSpaceServiceList() {
-                return Arrays.asList("myvo2", "myvo1");
-            }
         };
 
+        storageAction.setSyncInput(mockSyncInput);
+
+        Mockito.when(mockVOSpaceConfigManager.getServiceList()).thenReturn(Arrays.asList("myvo2", "myvo1"));
+        Mockito.when(mockSyncInput.getRequestPath()).thenReturn("/my-storage/myvo1/home/dune/first");
+
         Assert.assertEquals("Wrong service", "myvo1", storageAction.getCurrentVOSpaceService());
+
+        Mockito.verify(mockSyncInput, Mockito.times(1)).getRequestPath();
+        Mockito.verify(mockVOSpaceConfigManager, Mockito.times(1)).getServiceList();
     }
 }
