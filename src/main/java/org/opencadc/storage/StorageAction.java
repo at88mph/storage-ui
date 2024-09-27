@@ -136,11 +136,7 @@ public abstract class StorageAction extends RestAction {
     Path getCurrentPath() {
         final Path servicePath = getServicePath();
         final int servicePathElementCount = servicePath.getNameCount();
-        if (servicePathElementCount > 2) {
-            return servicePath.subpath(2, servicePathElementCount);
-        } else {
-            return Path.of("/");
-        }
+        return Path.of("/", ((servicePathElementCount > 2) ? servicePath.subpath(2, servicePathElementCount).toString() : ""));
     }
 
     Path getServicePath() {
@@ -240,12 +236,6 @@ public abstract class StorageAction extends RestAction {
     protected String getDisplayName() throws Exception {
         final IdentityManager identityManager = AuthenticationUtil.getIdentityManager();
         return identityManager.toDisplayString(getVOSpaceCallingSubject());
-    }
-
-    void redirectDefaultService() {
-        final Path redirectPath =
-            Path.of(this.syncInput.getContextPath(), this.voSpaceServiceConfigManager.getDefaultServiceName(), this.syncInput.getPath());
-        redirectSeeOther(redirectPath.toString());
     }
 
     void redirectSeeOther(final String redirectURL) {

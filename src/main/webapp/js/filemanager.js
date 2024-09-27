@@ -3179,7 +3179,6 @@ function fileManager(
             '</div>'
 
           $('div#multiple-uploads').dropzone({
-            paramName: 'upload',
             previewTemplate: previewItemTemplate,
             url: contextPath + vospaceServicePath + config.options.fileConnector + path,
             method: 'PUT',

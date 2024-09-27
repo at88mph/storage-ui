@@ -89,34 +89,30 @@ public class GetAction extends StorageAction {
     @Override
     public void doAction() throws Exception {
         final StorageItemContext storageItemType = getStorageItemType();
-        if (this.currentService == null) {
-            if (storageItemType == StorageItemContext.OIDC_CALLBACK) {
-                handleOIDCCallback();
-            } else if (storageItemType == StorageItemContext.OIDC_LOGIN) {
+        switch (storageItemType) {
+            case OIDC_LOGIN:
                 handleOIDCLogin();
-            } else {
-                redirectDefaultService();
-            }
-        } else {
-            switch (storageItemType) {
-                case FOLDER:
-                    handleFolder();
-                    break;
-                case LINK:
-                    handleLink();
-                    break;
-                case FILE:
-                    handleFile();
-                    break;
-                case LIST:
-                    handleList();
-                    break;
-                case PAGE:
-                    handlePage();
-                    break;
-                default: {
-                    throw new UnsupportedOperationException("No GET support for " + storageItemType + " with service " + this.currentService.getName());
-                }
+                break;
+            case OIDC_CALLBACK:
+                handleOIDCCallback();
+                break;
+            case FOLDER:
+                handleFolder();
+                break;
+            case LINK:
+                handleLink();
+                break;
+            case FILE:
+                handleFile();
+                break;
+            case LIST:
+                handleList();
+                break;
+            case PAGE:
+                handlePage();
+                break;
+            default: {
+                throw new UnsupportedOperationException("No GET support for " + storageItemType + " with service " + this.currentService.getName());
             }
         }
     }
